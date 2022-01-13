@@ -2,7 +2,7 @@
 
 ## Status
 
-So far, only the game itself is implemented - no solving yet.
+So far, only the game itself, and a count/list of possible remaining guesses is implemented - there's no actual solving yet.
 
 ## FAQ
 

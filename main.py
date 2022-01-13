@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 
-from colorama import Fore, Back, Style
 import colorama
 colorama.init()
 
 import argparse
-from enum import Enum, unique
-from typing import List
+from colorama import Fore, Back, Style
+from typing import List, Iterable
 import random
 
+from game_types import *
+from solver import Solver
 import word_list
 import user_input
 
@@ -26,14 +27,6 @@ def parse_args():
 	return parser.parse_args()
 
 
-@unique
-class CharStatus(Enum):
-	unknown = 0
-	not_in_solution = 1
-	wrong_position = 2
-	correct = 3
-
-
 def get_format(char_status: CharStatus) -> str:
 	return {
 		CharStatus.unknown:         FORMAT_UNKOWN,
@@ -43,44 +36,7 @@ def get_format(char_status: CharStatus) -> str:
 	}[char_status]
 
 
-def get_character_statuses(guess: str, solution: str) -> List[CharStatus]:
-
-	assert len(guess) == len(solution)
-
-	guess = guess.lower()
-	solution = solution.lower()
-
-	statuses = [CharStatus.unknown for _ in range(5)]
-
-	# 1st pass: green or definite grey
-	for n, character in enumerate(guess):
-
-		if character == solution[n]:
-			statuses[n] = CharStatus.correct
-
-		elif character not in solution:
-			statuses[n] = CharStatus.not_in_solution
-
-	# 2nd pass: letters that are in word but in wrong place - could be yellow or grey depending on green guesses
-	for n, character in enumerate(guess):
-		if statuses[n] == CharStatus.unknown:
-			assert character in solution
-
-			num_this_char_correct = sum([(c == character and s == CharStatus.correct) for c, s in zip(guess, statuses)])
-			num_this_char_in_solution = sum([c == character for c in solution])
-
-			assert num_this_char_in_solution >= 1
-			assert num_this_char_in_solution >= num_this_char_correct
-			num_this_char_in_solution_not_spoken_for = num_this_char_in_solution - num_this_char_correct
-
-			statuses[n] = CharStatus.wrong_position if num_this_char_in_solution_not_spoken_for > 0 else CharStatus.not_in_solution
-
-	assert not any([status == CharStatus.unknown for status in statuses])
-	return statuses
-
-
-def format_guess(guess: str, solution: str) -> str:
-	statuses = get_character_statuses(guess=guess, solution=solution)
+def format_guess(guess: str, statuses: Iterable[CharStatus]) -> str:
 	return ''.join([
 		get_format(status) + character.upper() for character, status in zip(guess, statuses)
 	]) + Style.RESET_ALL
@@ -105,15 +61,8 @@ class LetterStatus:
 		for row in rows:
 			print(''.join([self._format_char(ch) for ch in row]) + Style.RESET_ALL)
 
-	def add_guess(self, guess, solution):
-
-		assert len(guess) == len(solution)
-		guess = guess.lower()
-		solution = solution.lower()
-
-		statuses = get_character_statuses(guess=guess, solution=solution)
-
-		for character, status in zip(guess, statuses):
+	def add_guess(self, guess, statuses):
+		for character, status in zip(guess.lower(), statuses):
 			if self.char_status[character].value < status.value:
 				self.char_status[character] = status
 
@@ -149,21 +98,57 @@ def pick_solution(args):
 def play_game(solution):
 
 	letter_status = LetterStatus()
+	solver = Solver()
 	guesses = []
+
+	do_solver = True
 
 	print()
 
 	for guess_num in range(1,7):
 		letter_status.print_keyboard()
 		print()
+
+		if solver is not None:
+
+			num_possible_solutions = solver.get_num_possible_solutions()
+
+			if num_possible_solutions > 100:
+				# 101+
+				print('%i possible solutions' % num_possible_solutions)
+
+			elif num_possible_solutions > 10:
+				# 11-100
+				print('%i possible solutions:' % num_possible_solutions)
+				solutions = sorted(list(solver.get_possible_solitions()))
+				for tens in range(len(solutions) // 10 + 1):
+					idx_start = tens * 10
+					idx_end = min(idx_start + 10, len(solutions))
+					print('  ' + ', '.join([solution.upper() for solution in solutions[idx_start:idx_end]]))
+
+			elif num_possible_solutions > 1:
+				# 2-10
+				solutions = sorted([solution.upper() for solution in solver.get_possible_solitions()])
+				print('%i possible solutions: %s' % (num_possible_solutions, ', '.join(solutions)))
+
+			else:
+				# 1
+				print('Only 1 possible solution: %s' % list(solver.get_possible_solitions())[0].upper())
+
+			print()
+
 		guess = user_input.ask_word(guess_num)
-		
+
 		guesses.append(guess)
-		letter_status.add_guess(guess, solution)
-		
+		statuses = get_character_statuses(guess=guess, solution=solution)
+
+		letter_status.add_guess(guess, statuses)
+		solver.add_guess(guess, statuses)
+
 		print()
-		for n, word in enumerate(guesses):
-			print('%i: %s' % (n + 1, format_guess(word, solution)))
+		for n, this_guess in enumerate(guesses):
+			statuses = get_character_statuses(guess=this_guess, solution=solution)
+			print('%i: %s' % (n + 1, format_guess(this_guess, statuses)))
 		print()
 		
 		if guess == solution:
