@@ -17,7 +17,7 @@ But I wanted the solver to have the same information a regular player (who didn'
 
 I didn't want to use the actual Wordle list at all, but that could lead to situations where it might try to guess an ininvalid word, so unfortunately using the official list was necessary.
 
-### Why do yellow letters appear grey?
+### Why do green letters appear yellow, and yellow letters appear grey?
 
 This seems to be a problem with the default Windows Powershell colors.
 Using cmd or WSL should give you the correct colors.

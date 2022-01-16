@@ -71,7 +71,6 @@ def pick_solution(args):
 
 	print('%u total allowed words' % (len(word_list.words)))
 
-
 	if args.solution is not None:
 
 		solution = args.solution.strip().lower()
@@ -133,9 +132,10 @@ def play_game(solution):
 
 			else:
 				# 1
-				print('Only 1 possible solution: %s' % list(solver.get_possible_solitions())[0].upper())
+				print('Only 1 possible solution: %s' % tuple(solver.get_possible_solitions())[0].upper())
 
 			print()
+			solver.get_best_guess()
 
 		guess = user_input.ask_word(guess_num)
 
