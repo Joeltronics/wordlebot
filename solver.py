@@ -43,36 +43,90 @@ class Solver:
 		new_possible_solutions = [word for word in self.possible_solutions if self._is_valid_for_guess(word, (guess, character_status))]
 		return len(new_possible_solutions)
 
+	def _prune_guesses(self, guesses: Iterable[str], max_num: int) -> List[str]:
+		# TODO: smarter pruning than just random. Prioritize most common remaining unknown letters
+		guesses = list(guesses)
+		random.shuffle(guesses)
+		guesses = guesses[:max_num]
+		return guesses
 
-	def _brute_force_guess_for_fewest_remaining_words(self) -> str:
+	def _brute_force_guess_for_fewest_remaining_words(self, max_num_combos: Optional[int] = None) -> str:
 
-		guesses_possible_solutions = set(self.possible_solutions)
-		guesses_not_solutions = list(word_list.words - guesses_possible_solutions)
+		total_num_combos = len(word_list.words) * len(self.possible_solutions)
 
-		guesses_possible_solutions = list(guesses_possible_solutions)
-		random.shuffle(guesses_possible_solutions)
-		random.shuffle(guesses_not_solutions)
+		# The maximum number of guesses that we can try without hitting max_num_combos
+		max_num_guesses_to_try = max_num_combos // len(self.possible_solutions) if (max_num_combos is not None) else None
 
-		print('Brute forcing based on fewest remaining words; %u * %u = %u total combos to check' % (
-			len(guesses_possible_solutions) + len(guesses_not_solutions),
-			len(self.possible_solutions),
-			(len(guesses_possible_solutions) + len(guesses_not_solutions)) * len(self.possible_solutions),
+		print('Brute forcing based on fewest remaining words; %u * %u = %u possible combos to check' % (
+			len(word_list.words), len(self.possible_solutions), total_num_combos,
 		))
+
+		if (max_num_guesses_to_try is not None) and len(word_list.words) > max_num_guesses_to_try:
+
+			guesses_possible_solutions = set(self.possible_solutions)
+			guesses_not_solutions = word_list.words - set(self.possible_solutions)
+
+			# TODO: smarter pruning than just random
+			# Prioritize words with common letters in remaining solutions
+
+			# If num_combos_possible_solutions is more than 25% of the limit, prune both lists
+			# Otherwise, only prune guesses_not_solutions
+			if len(guesses_possible_solutions) > max_num_guesses_to_try // 4:
+
+				num_possible_solutions = max_num_guesses_to_try // 4
+				num_non_solutions = max_num_guesses_to_try - num_possible_solutions
+
+				print('Pruning both (%u > max %u. Trying %u/%u possible answers and %u/%u possible non-answers (%.1f%% of total solution space)' % (
+					total_num_combos,
+					max_num_combos,
+					num_possible_solutions, len(guesses_possible_solutions),
+					num_non_solutions, len(guesses_not_solutions),
+					100.0 * max_num_combos / total_num_combos,
+				))
+
+				guesses_possible_solutions = self._prune_guesses(guesses_possible_solutions, num_possible_solutions)
+				guesses_not_solutions = self._prune_guesses(guesses_not_solutions, num_non_solutions)
+
+			else:
+				num_non_solutions = max_num_guesses_to_try - len(guesses_possible_solutions)
+				print('Pruning guesses from non-possible solutions. Trying %u possible answers, and %u/%u non-answers (%.1f%% of total solution space)' % (
+					len(guesses_possible_solutions),
+					num_non_solutions,
+					len(guesses_not_solutions),
+					100.0 * max_num_combos / total_num_combos
+				))
+
+				guesses_not_solutions = self._prune_guesses(guesses_possible_solutions, num_non_solutions)
+
+				guesses_possible_solutions = list(guesses_possible_solutions)
+				random.shuffle(guesses_possible_solutions)
+
+		else:
+			guesses_possible_solutions = set(self.possible_solutions)
+			guesses_not_solutions = list(word_list.words - guesses_possible_solutions)
+
+			guesses_possible_solutions = list(guesses_possible_solutions)
+
+			print('No pruning; trying all %u words' % (len(guesses_not_solutions) + len(guesses_possible_solutions)))
+
+			random.shuffle(guesses_possible_solutions)
+			random.shuffle(guesses_not_solutions)
+
 		print()
-		print('Checking possible solutions; %u * %u = %u combos to check...' % (
-			len(guesses_possible_solutions), len(self.possible_solutions), len(guesses_possible_solutions) * len(self.possible_solutions)))
-		psosible_solution_best_guess, possible_solution_best_score = self._brute_force_guess_for_fewest_remaining_words_list(guesses_possible_solutions)
+		print('Checking %u possible solutions (%u * %u = %u combos to check...)' % (
+			len(guesses_possible_solutions), len(guesses_possible_solutions), len(self.possible_solutions), len(guesses_possible_solutions) * len(self.possible_solutions)))
+		possible_solution_best_guess, possible_solution_best_score = self._brute_force_guess_for_fewest_remaining_words_list(guesses_possible_solutions)
 		print()
 
-		print('Checking non-solutions; %u * %u = %u combos to check...' % (
-			len(guesses_not_solutions), len(self.possible_solutions), len(guesses_not_solutions) * len(self.possible_solutions)))
+		print('Checking %u non-solutions (%u * %u = %u combos to check...)' % (
+			len(guesses_not_solutions), len(guesses_not_solutions), len(self.possible_solutions), len(guesses_not_solutions) * len(self.possible_solutions)))
 		not_solution_best_guess, not_solution_best_score = self._brute_force_guess_for_fewest_remaining_words_list(guesses_not_solutions)
 		print()
 
-		if possible_solution_best_score < not_solution_best_score:
-			print('Best guess: %s' % psosible_solution_best_guess.upper())
+		if possible_solution_best_score <= not_solution_best_score:
+			print('Best guess: %s' % possible_solution_best_guess.upper())
 		else:
-			print("Best possible solution guess: %s, score %.2f" % (psosible_solution_best_guess.upper(), possible_solution_best_score))
+			print("Best possible solution guess: %s, score %.2f" % (possible_solution_best_guess.upper(), possible_solution_best_score))
 			print('Best other guess:             %s, score %.2f' % (not_solution_best_guess.upper(), not_solution_best_score))
 		print()
 
@@ -86,7 +140,7 @@ class Solver:
 		lowest_score = None
 		for guess_idx, guess in enumerate(guesses):
 
-			if (guess_idx + 1) % 100 == 0:
+			if (guess_idx + 1) % 1000 == 0:
 				print('%i/%i...' % (guess_idx+1, len(guesses)))
 
 			max_words_remaining = None
@@ -140,23 +194,32 @@ class Solver:
 
 		num_possible_solutions = len(self.possible_solutions)
 
-		assert num_possible_solutions > 0
+		assert 0 < num_possible_solutions <= len(word_list.words)
 
-		if num_possible_solutions == 1:
-			return tuple(self.possible_solutions)[0]
+		if num_possible_solutions == len(word_list.words):
+			# This is the first guess
+			# TODO: use "opening book"
+			pass  # TODO
+
+		elif num_possible_solutions > 1000:
+			# TODO: pick based on most common letters
+			return None
+
+		elif num_possible_solutions > 10:
+			# Brute force search based on what eliminates the most possible solutions
+			return self._brute_force_guess_for_fewest_remaining_words(max_num_combos=int(1e5))
+
+		elif num_possible_solutions > 2:
+			# TODO: brute force search based on fewest number of guesses needed to solve puzzle
+			# This would make search space massive, which is why we'd only do it when few remaining solutions
+			return self._brute_force_guess_for_fewest_remaining_words(max_num_combos=int(1e5))
 
 		elif num_possible_solutions == 2:
+			# No possible way to pick
 			return None
 
-		elif num_possible_solutions <= 50:
-			# TODO: technically the metric of "fewest remaining words" is still a heuristic - a good one, but still
-			# The actual metric we want to optimize is "fewest number of guesses to solve"
-			return self._brute_force_guess_for_fewest_remaining_words()
-
-		elif num_possible_solutions <= 1000:
-			pass  # TODO: not sure - heuristics?
-			return None
-
+		elif num_possible_solutions == 1:
+			return tuple(self.possible_solutions)[0]
+		
 		else:
-			pass  # TODO: use "opening book"?
-			return None
+			raise AssertionError
