@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import collections
 import random
 from typing import Tuple, Iterable, Optional
 
@@ -12,6 +13,7 @@ class Solver:
 		self.all_valid_solutions = valid_solutions
 		self.allowed_words = allowed_words
 		self.possible_solutions = self.all_valid_solutions
+		self.solved_letters = [None] * 5
 
 	def get_num_possible_solutions(self) -> int:
 		return len(self.possible_solutions)
@@ -34,6 +36,24 @@ class Solver:
 		self.guesses.append(this_guess)
 		self.possible_solutions = {word for word in self.possible_solutions if self._is_valid_for_guess(word, this_guess)}
 		assert len(self.possible_solutions) > 0
+
+		for idx in range(5):
+			if character_statuses[idx] == CharStatus.correct:
+				self.solved_letters[idx] = guess_word[idx]
+
+	def get_most_common_unsolved_letters(self):
+
+		def _remove_solved_letters(word):
+			return ''.join([
+				letter if (solved_letter is None or letter != solved_letter) else ''
+				for letter, solved_letter in zip(word, self.solved_letters)
+			])
+
+		words_solved_chars_removed = [_remove_solved_letters(word) for word in self.possible_solutions]
+		all_chars = ''.join(words_solved_chars_removed)
+		counter = collections.Counter(all_chars)
+
+		return counter.most_common()
 
 	def _num_words_remaining(self, guess: str, possible_solution: str) -> int:
 		"""

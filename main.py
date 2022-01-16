@@ -141,6 +141,12 @@ def play_game(solution, solver: Solver):
 				# 1
 				print('Only 1 possible solution: %s' % tuple(solver.get_possible_solitions())[0].upper())
 
+			if num_possible_solutions > 1:
+				most_common_unsolved_letters = solver.get_most_common_unsolved_letters()
+				print(
+					'Most common unsolved letters: ' +
+					''.join([letter.upper() for letter, frequency in most_common_unsolved_letters]))
+
 			print()
 			solver.get_best_guess()
 
