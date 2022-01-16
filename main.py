@@ -23,6 +23,8 @@ FORMAT_NOT_IN_SOLUTION = Back.WHITE + Fore.BLACK
 def parse_args():
 	parser = argparse.ArgumentParser()
 	parser.add_argument('-s', '--solution', type=str, default=None, help='Set the specific solution')
+	parser.add_argument('--all-words', action='store_true', help='Allow all valid words as solutions, not just limited set')
+	parser.add_argument('--agnostic', action='store_true', help='Make solver unaware of limited set of possible solutions')
 	parser.add_argument('--cheat', action='store_true', help='Show the solution')
 	return parser.parse_args()
 
@@ -69,7 +71,7 @@ class LetterStatus:
 
 def pick_solution(args):
 
-	print('%u total allowed words' % (len(word_list.words)))
+	print('%u total allowed words, %u possible solutions' % (len(word_list.words), len(word_list.solutions)))
 
 	if args.solution is not None:
 
@@ -78,15 +80,21 @@ def pick_solution(args):
 		if len(solution) != 5:
 			print('ERROR: "%s" is not a valid solution, must have length 5' % solution.upper())
 			exit(1)
-
-		if solution not in word_list.words:
+		elif solution not in word_list.words:
 			print('WARNING: "%s" is not a valid word; proceeding with game anyway' % solution.upper())
+			print()
+		elif (solution not in word_list.solutions) and not args.all_words:
+			print('WARNING: "%s" is an accepted word, but not in solutions list; proceeding with game anyway' % solution.upper())
 			print()
 
 		print('Solution given: %s' % solution.upper())
 
 	else:
-		solution = random.choice(list(word_list.words))
+		if args.all_words:
+			solution = random.choice(list(word_list.words))
+		else:
+			solution = random.choice(list(word_list.solutions))
+
 		if args.cheat:
 			print()
 			print('CHEAT MODE: solution is %s' % solution.upper())
@@ -94,10 +102,9 @@ def pick_solution(args):
 	return solution
 
 
-def play_game(solution):
+def play_game(solution, solver: Solver):
 
 	letter_status = LetterStatus()
-	solver = Solver()
 	guesses = []
 
 	do_solver = True
@@ -163,7 +170,13 @@ def main():
 	args = parse_args()
 	print('Wordle solver')
 	solution = pick_solution(args)
-	play_game(solution)
+
+	solver = Solver(
+		valid_solutions=(word_list.words if (args.all_words or args.agnostic) else word_list.solutions),
+		allowed_words=word_list.words,
+	)
+
+	play_game(solution=solution, solver=solver)
 
 
 if __name__ == "__main__":

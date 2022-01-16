@@ -4,13 +4,14 @@ import random
 from typing import Tuple, Iterable, Optional
 
 from game_types import *
-import word_list
 
 
 class Solver:
-	def __init__(self):
+	def __init__(self, valid_solutions: Iterable[str], allowed_words: Iterable[str]):
 		self.guesses = []
-		self.possible_solutions = word_list.words
+		self.all_valid_solutions = valid_solutions
+		self.allowed_words = allowed_words
+		self.possible_solutions = self.all_valid_solutions
 
 	def get_num_possible_solutions(self) -> int:
 		return len(self.possible_solutions)
@@ -52,19 +53,19 @@ class Solver:
 
 	def _brute_force_guess_for_fewest_remaining_words(self, max_num_combos: Optional[int] = None) -> str:
 
-		total_num_combos = len(word_list.words) * len(self.possible_solutions)
+		total_num_combos = len(self.allowed_words) * len(self.possible_solutions)
 
 		# The maximum number of guesses that we can try without hitting max_num_combos
 		max_num_guesses_to_try = max_num_combos // len(self.possible_solutions) if (max_num_combos is not None) else None
 
 		print('Brute forcing based on fewest remaining words; %u * %u = %u possible combos to check' % (
-			len(word_list.words), len(self.possible_solutions), total_num_combos,
+			len(self.allowed_words), len(self.possible_solutions), total_num_combos,
 		))
 
-		if (max_num_guesses_to_try is not None) and len(word_list.words) > max_num_guesses_to_try:
+		if (max_num_guesses_to_try is not None) and len(self.allowed_words) > max_num_guesses_to_try:
 
 			guesses_possible_solutions = set(self.possible_solutions)
-			guesses_not_solutions = word_list.words - set(self.possible_solutions)
+			guesses_not_solutions = self.allowed_words - set(self.possible_solutions)
 
 			# TODO: smarter pruning than just random
 			# Prioritize words with common letters in remaining solutions
@@ -96,14 +97,14 @@ class Solver:
 					100.0 * max_num_combos / total_num_combos
 				))
 
-				guesses_not_solutions = self._prune_guesses(guesses_possible_solutions, num_non_solutions)
+				guesses_not_solutions = self._prune_guesses(guesses_not_solutions, num_non_solutions)
 
 				guesses_possible_solutions = list(guesses_possible_solutions)
 				random.shuffle(guesses_possible_solutions)
 
 		else:
 			guesses_possible_solutions = set(self.possible_solutions)
-			guesses_not_solutions = list(word_list.words - guesses_possible_solutions)
+			guesses_not_solutions = list(self.allowed_words - guesses_possible_solutions)
 
 			guesses_possible_solutions = list(guesses_possible_solutions)
 
@@ -194,9 +195,9 @@ class Solver:
 
 		num_possible_solutions = len(self.possible_solutions)
 
-		assert 0 < num_possible_solutions <= len(word_list.words)
+		assert 0 < num_possible_solutions <= len(self.allowed_words)
 
-		if num_possible_solutions == len(word_list.words):
+		if num_possible_solutions == len(self.all_valid_solutions):
 			# This is the first guess
 			# TODO: use "opening book"
 			pass  # TODO
