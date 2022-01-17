@@ -2,7 +2,37 @@
 
 ## Status
 
-So far, there's a basic solver, but it's far from perfect
+So far, there's a basic solver. It does a pretty good job, but it's far from perfect - there are lots of TODO comments in the code where it could be improved.
+
+Right now it will only play its own internal game, there's no way to use this to solve along with a real game of Wordle (at least, not yet)
+
+## How does it work?
+
+For the first guess, choose whichever word uses the most common letters in the list of possible solutions.
+
+For all subsequent guesses, use whichever guess will best narrow down the remaining possible solutions.
+"Best" is difficult to quanitify here - there are a few different ways this could be chosen, most obviously worst-case (minimax), lowest average, or lowest mean-squared.
+Currently it uses a weighted score of minimax & average, weighted heavily toward minimax.
+
+This has an O(n^3) complexity, so when there are still many possible solutions remaining, we prune the list of possible guesses, based on which use the most common remaining letters.
+
+## How could it be improved?
+
+The actual variable we want to optimize is which will solve with the fewest guesses.
+Solving for which guess will best narrow down the remaining possible solutions is a pretty good heuristic, but it's still not perfect.
+However, the current algorithm is already slow enough; making the algorithm look ahead to future guesses would significantly increase the complexity.
+But it would be worth exploring this when there are few remaining.
+
+This hasn't really been benchmarked - most elements of the algorithm were just chosen based on intuition, not actual data.
+It would be good to profile this, and optimize the various tradeoffs for what has the actual best results.
+
+Right now we only prune guesses; I suspect that when we are not yet close to a solution, there could be great performance improvements with little drawback by only comparing against a limited subset of the possible solutions as well.
+And since we're only reducing one of the 3 numbers that multiply up to that O(n^3) complexity, the existing pruning doesn't improve performance as much as intended, either (i.e. ideally every guess should take around the same amount of time regardless of total solution space size).
+
+The guess pruning algorithm itself could also stand to be improved - right now it just looks for most common unsolved letters in words, but doesn't account for letter position, yellow letters, or multiple of the same letter in the word.
+
+The code isn't really optimized, and there could be some potential performance gains there.
+This is just a quick project from a few evenings of work, so the code quality is definitely not perfect either.
 
 ## FAQ
 

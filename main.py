@@ -25,6 +25,7 @@ def parse_args():
 	parser.add_argument('-s', '--solution', type=str, default=None, help='Set the specific solution')
 	parser.add_argument('--all-words', action='store_true', help='Allow all valid words as solutions, not just limited set')
 	parser.add_argument('--agnostic', action='store_true', help='Make solver unaware of limited set of possible solutions')
+	parser.add_argument('--solve', action='store_true', help="Automatically use solver's guess")
 	parser.add_argument('--cheat', action='store_true', help='Show the solution')
 	return parser.parse_args()
 
@@ -102,18 +103,18 @@ def pick_solution(args):
 	return solution
 
 
-def play_game(solution, solver: Solver):
+def play_game(solution, solver: Solver, auto_solve: bool):
 
 	letter_status = LetterStatus()
 	guesses = []
-
-	do_solver = True
 
 	print()
 
 	for guess_num in range(1,7):
 		letter_status.print_keyboard()
 		print()
+
+		guess = None
 
 		if solver is not None:
 
@@ -148,9 +149,12 @@ def play_game(solution, solver: Solver):
 					''.join([letter.upper() for letter, frequency in most_common_unsolved_letters]))
 
 			print()
-			solver.get_best_guess()
+			guess = solver.get_best_guess()
 
-		guess = user_input.ask_word(guess_num)
+		if auto_solve and (guess is not None):
+			print('Using guess from solver: %s' % guess.upper())
+		else:
+			guess = user_input.ask_word(guess_num)
 
 		guesses.append(guess)
 		statuses = get_character_statuses(guess=guess, solution=solution)
@@ -182,7 +186,7 @@ def main():
 		allowed_words=word_list.words,
 	)
 
-	play_game(solution=solution, solver=solver)
+	play_game(solution=solution, solver=solver, auto_solve=args.solve)
 
 
 if __name__ == "__main__":
