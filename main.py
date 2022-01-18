@@ -22,11 +22,17 @@ FORMAT_NOT_IN_SOLUTION = Back.WHITE + Fore.BLACK
 
 def parse_args():
 	parser = argparse.ArgumentParser()
-	parser.add_argument('-s', '--solution', type=str, default=None, help='Set the specific solution')
+
+	parser.add_argument('-s', dest='solution', type=str, default=None, help='Set the specific solution')
+	parser.add_argument(
+		'-l', dest='limit', type=float, default=6,
+		help='Limit solver search space complexity (higher means it will run slower but search more comprehensively); specified as a power of 10; default 6')
+
 	parser.add_argument('--all-words', action='store_true', help='Allow all valid words as solutions, not just limited set')
 	parser.add_argument('--agnostic', action='store_true', help='Make solver unaware of limited set of possible solutions')
 	parser.add_argument('--solve', action='store_true', help="Automatically use solver's guess")
 	parser.add_argument('--cheat', action='store_true', help='Show the solution')
+
 	return parser.parse_args()
 
 
@@ -184,6 +190,7 @@ def main():
 	solver = Solver(
 		valid_solutions=(word_list.words if (args.all_words or args.agnostic) else word_list.solutions),
 		allowed_words=word_list.words,
+		complexity_limit=int(round(10.0 ** args.limit)),
 	)
 
 	play_game(solution=solution, solver=solver, auto_solve=args.solve)
