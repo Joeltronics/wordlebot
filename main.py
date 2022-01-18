@@ -31,6 +31,7 @@ def parse_args():
 	parser.add_argument('--all-words', action='store_true', help='Allow all valid words as solutions, not just limited set')
 	parser.add_argument('--agnostic', action='store_true', help='Make solver unaware of limited set of possible solutions')
 	parser.add_argument('--solve', action='store_true', help="Automatically use solver's guess")
+	parser.add_argument('--debug', action='store_true', help='Enable debug printing')
 	parser.add_argument('--cheat', action='store_true', help='Show the solution')
 
 	return parser.parse_args()
@@ -185,12 +186,14 @@ def play_game(solution, solver: Solver, auto_solve: bool):
 def main():
 	args = parse_args()
 	print('Wordle solver')
+
 	solution = pick_solution(args)
 
 	solver = Solver(
 		valid_solutions=(word_list.words if (args.all_words or args.agnostic) else word_list.solutions),
 		allowed_words=word_list.words,
 		complexity_limit=int(round(10.0 ** args.limit)),
+		debug_print=args.debug
 	)
 
 	play_game(solution=solution, solver=solver, auto_solve=args.solve)

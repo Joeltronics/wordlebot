@@ -7,12 +7,17 @@ from game_types import *
 
 
 class Solver:
-	def __init__(self, valid_solutions: Iterable[str], allowed_words: Iterable[str], complexity_limit: int):
+	def __init__(self, valid_solutions: Iterable[str], allowed_words: Iterable[str], complexity_limit: int, debug_print=False):
 		self.guesses = []
 		self.allowed_words = allowed_words
 		self.possible_solutions = valid_solutions
 		self.solved_letters = [None] * 5
 		self.complexity_limit = complexity_limit
+		self.debug_print = debug_print
+
+	def dprint(self, *args, **kwargs):
+		if self.debug_print:
+			print(*args, **kwargs)
 
 	def get_num_possible_solutions(self) -> int:
 		return len(self.possible_solutions)
@@ -81,7 +86,9 @@ class Solver:
 		def _score(word):
 			return sum([counter[unique_letter] for unique_letter in set(word)])
 
-		guesses = list(guesses)
+		# Start with sorted list
+		# Otherwise behavior will be nondeterministic in cases of tied letter score (i.e. 2 words that are anagrams)
+		guesses = sorted(list(guesses))
 		guesses.sort(key=_score, reverse=True)
 
 		# TODO: could it be an overall improvement to randomly mix in a few with less common letters too?
@@ -176,25 +183,25 @@ class Solver:
 			len(solutions_to_check_num_remaining),
 			len(guesses_possible_solutions) * len(solutions_to_check_possible) * len(solutions_to_check_num_remaining),
 		))
-		print('Initial best candidates: ' + ' '.join([guess.upper() for guess in (
+		self.dprint('Initial best candidates: ' + ' '.join([guess.upper() for guess in (
 			guesses_possible_solutions[:5] if len(guesses_possible_solutions) > 5 else guesses_possible_solutions
 		)]))
 		possible_solution_best_guess, possible_solution_best_score = self._brute_force_guess_for_fewest_remaining_words_list(
 			guesses=guesses_possible_solutions,
 			solutions_to_check_possible=solutions_to_check_possible,
 			solutions_to_check_num_remaining=solutions_to_check_num_remaining)
-		print()
+		self.dprint()
 
 		print('Checking %u non-solutions (%u * %u = %u combos to check...)' % (
 			len(guesses_not_solutions), len(guesses_not_solutions), len(self.possible_solutions), len(guesses_not_solutions) * len(self.possible_solutions)))
-		print('Initial best candidates: ' + ' '.join([guess.upper() for guess in (
+		self.dprint('Initial best candidates: ' + ' '.join([guess.upper() for guess in (
 			guesses_not_solutions[:5] if len(guesses_not_solutions) > 5 else guesses_not_solutions
 		)]))
 		not_solution_best_guess, not_solution_best_score = self._brute_force_guess_for_fewest_remaining_words_list(
 			guesses=guesses_not_solutions,
 			solutions_to_check_possible=solutions_to_check_possible,
 			solutions_to_check_num_remaining=solutions_to_check_num_remaining)
-		print()
+		self.dprint()
 
 		ret = None
 
@@ -232,7 +239,7 @@ class Solver:
 		for guess_idx, guess in enumerate(guesses):
 
 			if (guess_idx + 1) % 1000 == 0:
-				print('%i/%i...' % (guess_idx+1, len(guesses)))
+				self.dprint('%i/%i...' % (guess_idx+1, len(guesses)))
 
 			max_words_remaining = None
 			sum_words_remaining = 0
@@ -258,7 +265,7 @@ class Solver:
 			if is_lowest_score:
 				best_guess = guess
 				lowest_score = score
-				print('Best so far (%u/%u): %s, score %.2f (average %.2f, lowest %.2f / worst case %i, lowest %i)' % (
+				self.dprint('Best so far (%u/%u): %s, score %.2f (average %.2f, lowest %.2f / worst case %i, lowest %i)' % (
 					guess_idx + 1, len(guesses),
 					guess.upper(),
 					score,
@@ -267,13 +274,13 @@ class Solver:
 				))
 
 			if is_lowest_average and not is_lowest_score:
-				print('New lowest average (%u/%u): %s, average %.2f (score %.2f)' % (
+				self.dprint('New lowest average (%u/%u): %s, average %.2f (score %.2f)' % (
 					guess_idx + 1, len(guesses),
 					guess.upper(), average_words_remaining, score
 				))
 
 			if is_lowest_max and not is_lowest_score:
-				print('New lowest max (%u/%u): %s, max %i (score %.2f)' % (
+				self.dprint('New lowest max (%u/%u): %s, max %i (score %.2f)' % (
 					guess_idx + 1, len(guesses),
 					guess.upper(), max_words_remaining, score
 				))
