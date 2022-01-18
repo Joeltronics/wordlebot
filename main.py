@@ -5,7 +5,9 @@ colorama.init()
 
 import argparse
 from colorama import Fore, Back, Style
-from typing import List, Iterable
+import itertools
+import time
+from typing import Iterable, Optional
 import random
 
 from game_types import *
@@ -33,6 +35,8 @@ def parse_args():
 	parser.add_argument('--solve', action='store_true', help="Automatically use solver's guess")
 	parser.add_argument('--debug', action='store_true', help='Enable debug printing')
 	parser.add_argument('--cheat', action='store_true', help='Show the solution')
+	parser.add_argument('--endless', action='store_true', help="Don't end after six guesses if still unsolved")
+	parser.add_argument('--benchmark', action='store_true', help='Benchmark performance')
 
 	return parser.parse_args()
 
@@ -77,7 +81,29 @@ class LetterStatus:
 				self.char_status[character] = status
 
 
-def pick_solution(args):
+class DeterministicPseudorandom:
+	"""
+	A pretty bad RNG (using a linear congruential generator)
+	"""
+
+	def __init__(self, seed: int):
+		self.state = seed
+		# Values from C++11 minstd_rand
+		self.a = 48271
+		self.c = 0
+		self.m = 2**31 - 1
+
+	def random(self, range: Optional[int]=None):
+		self.state = (self.a * self.state + self.c) % self.m
+
+		if range is not None:
+			# Not technically a perfeclty fair way to limit range, but close enough for this use case
+			return self.state % range
+		else:
+			return self.state
+
+
+def pick_solution(args, deterministic_idx: Optional[int] = None):
 
 	print('%u total allowed words, %u possible solutions' % (len(word_list.words), len(word_list.solutions)))
 
@@ -98,10 +124,16 @@ def pick_solution(args):
 		print('Solution given: %s' % solution.upper())
 
 	else:
-		if args.all_words:
-			solution = random.choice(list(word_list.words))
+
+		words = list(word_list.words if args.all_words else word_list.solutions)
+
+		if deterministic_idx is not None:
+			words.sort()
+			rng = DeterministicPseudorandom(seed=deterministic_idx)
+			solution = words[rng.random(range=len(words))]
+
 		else:
-			solution = random.choice(list(word_list.solutions))
+			solution = random.choice(words)
 
 		if args.cheat:
 			print()
@@ -110,14 +142,18 @@ def pick_solution(args):
 	return solution
 
 
-def play_game(solution, solver: Solver, auto_solve: bool):
+def play_game(solution, solver: Solver, auto_solve: bool, endless=False) -> int:
+	"""
+	:returns: Number of guesses game was solved in
+	"""
 
 	letter_status = LetterStatus()
 	guesses = []
 
 	print()
 
-	for guess_num in range(1,7):
+	for guess_num in itertools.count(1):
+
 		letter_status.print_keyboard()
 		print()
 
@@ -152,15 +188,17 @@ def play_game(solution, solver: Solver, auto_solve: bool):
 			if num_possible_solutions > 1:
 				most_common_unsolved_letters = solver.get_most_common_unsolved_letters()
 				print(
-					'Most common unsolved letters: ' +
+					'Order of most common unsolved letters: ' +
 					''.join([letter.upper() for letter, frequency in most_common_unsolved_letters]))
 
 			print()
-			guess = solver.get_best_guess()
+			solver_guess = solver.get_best_guess()
 
-		if auto_solve and (guess is not None):
-			print('Using guess from solver: %s' % guess.upper())
+		if auto_solve and (solver_guess is not None):
+			print('Using guess from solver: %s' % solver_guess.upper())
+			guess = solver_guess
 		else:
+			print('Solver best guess is %s' % solver_guess.upper())
 			guess = user_input.ask_word(guess_num)
 
 		guesses.append(guess)
@@ -177,15 +215,79 @@ def play_game(solution, solver: Solver, auto_solve: bool):
 		
 		if guess == solution:
 			print('Success!')
-			return
+			return guess_num
 
-	else:
-		print('Failed, the solution was %s' % solution.upper())
+		if guess_num == 6 and endless:
+			print('Playing in endless mode - continuing after 6 guesses')
+			print()
+		elif guess_num >= 6 and not endless:
+			print('Failed, the solution was %s' % solution.upper())
+			return 0
+
+
+def benchmark(args, num_benchmark=50):
+
+	results = []
+
+	print()
+	print('Benchmarking %i runs...' % num_benchmark)
+	print()
+
+	for idx in range(num_benchmark):
+
+		solution = pick_solution(args, deterministic_idx=idx)
+
+		start_time = time.time()
+
+		# TODO: don't print anything, so this isn't slowed down by I/O
+
+		solver = Solver(
+			valid_solutions=(word_list.words if (args.all_words or args.agnostic) else word_list.solutions),
+			allowed_words=word_list.words,
+			complexity_limit=int(round(10.0 ** args.limit)),
+			debug_print=False
+		)
+
+		num_guesses = play_game(solution=solution, solver=solver, auto_solve=True, endless=True)
+
+		end_time = time.time()
+		duration = end_time - start_time
+
+		solved = (0 < num_guesses <= 6)
+
+		results.append(dict(solution=solution, num_guesses=num_guesses, duration=duration, solved=solved))
+
+	assert len(results) == num_benchmark
+
+	# TODO: figure out which solution had the worst benchmarks
+
+	avg_duration = sum([result['duration'] for result in results]) / len(results)
+	max_duration = max([result['duration'] for result in results])
+	min_duration = min([result['duration'] for result in results])
+
+	avg_guesses = sum([result['num_guesses'] for result in results]) / len(results)
+	max_guesses = max([result['num_guesses'] for result in results])
+	min_guesses = min([result['num_guesses'] for result in results])
+
+	num_solved = sum([result['solved'] for result in results])
+
+	print()
+	print('Benchmarked %s runs:' % len(results))
+	for result in results:
+		print("  %s: %i guesses, %f seconds" % (result['solution'].upper(), result['num_guesses'], result['duration']))
+	print()
+	print('Solved %u/%u (%.1f%%)' % (num_solved, len(results), num_solved / len(results) * 100.0))
+	print('Guesses: min %i, average %.2f, max %i' % (min_guesses, avg_guesses, max_guesses))
+	print('Time: min %f, average %f, max %f' % (min_duration, avg_duration, max_duration))
 
 
 def main():
 	args = parse_args()
 	print('Wordle solver')
+
+	if args.benchmark:
+		benchmark(args)
+		return
 
 	solution = pick_solution(args)
 
@@ -196,7 +298,7 @@ def main():
 		debug_print=args.debug
 	)
 
-	play_game(solution=solution, solver=solver, auto_solve=args.solve)
+	play_game(solution=solution, solver=solver, auto_solve=args.solve, endless=args.endless)
 
 
 if __name__ == "__main__":

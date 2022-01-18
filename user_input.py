@@ -15,7 +15,12 @@ _exit_words = [
 def ask_word(guess_num: int) -> str:
 
 	while True:
-		guess = input("Enter guess %i/6 (or 'q' to quit): " % guess_num)
+		if guess_num <= 6:
+			input_str = "Enter guess %i/6 (or 'q' to quit): "
+		else:
+			input_str = "Enter guess %i (or 'q' to quit): "
+
+		guess = input(input_str % guess_num)
 		guess = guess.strip().lower()
 		
 		# Debug feature: start with '!' to force allowing a guess
