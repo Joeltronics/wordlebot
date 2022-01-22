@@ -11,7 +11,7 @@ from typing import Iterable, Optional
 import random
 
 from game_types import *
-from solver import Solver
+from solver import Solver, SolverVerbosity
 import word_list
 import user_input
 
@@ -25,20 +25,28 @@ FORMAT_NOT_IN_SOLUTION = Back.WHITE + Fore.BLACK
 def parse_args():
 	parser = argparse.ArgumentParser()
 
-	parser.add_argument('-s', dest='solution', type=str, default=None, help='Set the specific solution')
+	parser.add_argument('-s', dest='solution', type=str, default=None, help='Specify a solution')
 	parser.add_argument(
 		'-l', dest='limit', type=float, default=6,
-		help='Limit solver search space complexity (higher means it will run slower but search more comprehensively); specified as a power of 10; default 6')
+		help='Limit solver search space complexity (i.e. higher will do a better job of solving, but run much slower). Specified as a power of 10. Default 6.')
+	parser.add_argument(
+		'-b', metavar='RUNS', dest='benchmark', type=int, default=None,
+		help='Benchmark performance')
 
+	parser.add_argument('--benchmark', dest='benchmark', action='store_const', const=50, help='Equivalent to -b 50')
 	parser.add_argument('--all-words', action='store_true', help='Allow all valid words as solutions, not just limited set')
 	parser.add_argument('--agnostic', action='store_true', help='Make solver unaware of limited set of possible solutions')
 	parser.add_argument('--solve', action='store_true', help="Automatically use solver's guess")
 	parser.add_argument('--debug', action='store_true', help='Enable debug printing')
 	parser.add_argument('--cheat', action='store_true', help='Show the solution')
 	parser.add_argument('--endless', action='store_true', help="Don't end after six guesses if still unsolved")
-	parser.add_argument('--benchmark', action='store_true', help='Benchmark performance')
 
-	return parser.parse_args()
+	args = parser.parse_args()
+
+	if args.limit < 0:
+		raise ValueError('Minimum -l value is 0')
+
+	return args
 
 
 def get_format(char_status: CharStatus) -> str:
@@ -48,6 +56,24 @@ def get_format(char_status: CharStatus) -> str:
 		CharStatus.wrong_position:  FORMAT_WRONG_POSITION,
 		CharStatus.correct:         FORMAT_CORRECT,
 	}[char_status]
+
+
+def get_format_for_num_guesses(num_guesses: int) -> str:
+	if num_guesses < 1:
+		raise ValueError('num_guesses must be >= 1')
+
+	# I know this isn't in hue order, but green=best, yellow=bad, red=worst made the most sense,
+	# so this is the only place blue fits
+	return [
+		Back.RESET + Fore.WHITE,  # 1
+		Back.RESET + Fore.GREEN,  # 2
+		Back.RESET + Fore.CYAN,   # 3
+		Back.RESET + Fore.BLUE,   # 4
+		Back.RESET + Fore.YELLOW, # 5
+		Back.RESET + Fore.RED,    # 6
+		Back.RED + Fore.WHITE,    # >= 7
+	][min(num_guesses - 1, 6)]
+
 
 
 def format_guess(guess: str, statuses: Iterable[CharStatus]) -> str:
@@ -103,9 +129,10 @@ class DeterministicPseudorandom:
 			return self.state
 
 
-def pick_solution(args, deterministic_idx: Optional[int] = None):
+def pick_solution(args, deterministic_idx: Optional[int] = None, do_print=True):
 
-	print('%u total allowed words, %u possible solutions' % (len(word_list.words), len(word_list.solutions)))
+	if do_print:
+		print('%u total allowed words, %u possible solutions' % (len(word_list.words), len(word_list.solutions)))
 
 	if args.solution is not None:
 
@@ -142,22 +169,27 @@ def pick_solution(args, deterministic_idx: Optional[int] = None):
 	return solution
 
 
-def play_game(solution, solver: Solver, auto_solve: bool, endless=False) -> int:
+def play_game(solution, solver: Solver, auto_solve: bool, endless=False, silent=False) -> int:
 	"""
 	:returns: Number of guesses game was solved in
 	"""
 
+	def game_print(*args, **kwargs):
+		if not silent:
+			print(*args, **kwargs)
+
 	letter_status = LetterStatus()
 	guesses = []
 
-	print()
+	game_print()
 
 	for guess_num in itertools.count(1):
 
-		letter_status.print_keyboard()
-		print()
+		if not silent:
+			letter_status.print_keyboard()
+		game_print()
 
-		guess = None
+		solver_guess = None
 
 		if solver is not None:
 
@@ -165,40 +197,40 @@ def play_game(solution, solver: Solver, auto_solve: bool, endless=False) -> int:
 
 			if num_possible_solutions > 100:
 				# 101+
-				print('%i possible solutions' % num_possible_solutions)
+				game_print('%i possible solutions' % num_possible_solutions)
 
 			elif num_possible_solutions > 10:
 				# 11-100
-				print('%i possible solutions:' % num_possible_solutions)
+				game_print('%i possible solutions:' % num_possible_solutions)
 				solutions = sorted(list(solver.get_possible_solitions()))
 				for tens in range(len(solutions) // 10 + 1):
 					idx_start = tens * 10
 					idx_end = min(idx_start + 10, len(solutions))
-					print('  ' + ', '.join([solution.upper() for solution in solutions[idx_start:idx_end]]))
+					game_print('  ' + ', '.join([solution.upper() for solution in solutions[idx_start:idx_end]]))
 
 			elif num_possible_solutions > 1:
 				# 2-10
 				solutions = sorted([solution.upper() for solution in solver.get_possible_solitions()])
-				print('%i possible solutions: %s' % (num_possible_solutions, ', '.join(solutions)))
+				game_print('%i possible solutions: %s' % (num_possible_solutions, ', '.join(solutions)))
 
 			else:
 				# 1
-				print('Only 1 possible solution: %s' % tuple(solver.get_possible_solitions())[0].upper())
+				game_print('Only 1 possible solution: %s' % tuple(solver.get_possible_solitions())[0].upper())
 
 			if num_possible_solutions > 1:
 				most_common_unsolved_letters = solver.get_most_common_unsolved_letters()
-				print(
+				game_print(
 					'Order of most common unsolved letters: ' +
 					''.join([letter.upper() for letter, frequency in most_common_unsolved_letters]))
 
-			print()
+			game_print()
 			solver_guess = solver.get_best_guess()
 
 		if auto_solve and (solver_guess is not None):
-			print('Using guess from solver: %s' % solver_guess.upper())
+			game_print('Using guess from solver: %s' % solver_guess.upper())
 			guess = solver_guess
 		else:
-			print('Solver best guess is %s' % solver_guess.upper())
+			game_print('Solver best guess is %s' % solver_guess.upper())
 			guess = user_input.ask_word(guess_num)
 
 		guesses.append(guess)
@@ -207,23 +239,41 @@ def play_game(solution, solver: Solver, auto_solve: bool, endless=False) -> int:
 		letter_status.add_guess(guess, statuses)
 		solver.add_guess(guess, statuses)
 
-		print()
+		game_print()
 		for n, this_guess in enumerate(guesses):
 			statuses = get_character_statuses(guess=this_guess, solution=solution)
-			print('%i: %s' % (n + 1, format_guess(this_guess, statuses)))
-		print()
+			game_print('%i: %s' % (n + 1, format_guess(this_guess, statuses)))
+		game_print()
 		
 		if guess == solution:
-			print('Success!')
+			game_print('Success!')
 			return guess_num
 
 		if guess_num == 6 and endless:
-			print('Playing in endless mode - continuing after 6 guesses')
-			print()
+			game_print('Playing in endless mode - continuing after 6 guesses')
+			game_print()
 		elif guess_num >= 6 and not endless:
-			print('Failed, the solution was %s' % solution.upper())
+			game_print('Failed, the solution was %s' % solution.upper())
 			return 0
 
+
+class RollingStats:
+	def __init__(self):
+		self.sum = 0
+		self.count = 0
+		self.min = None
+		self.max = None
+
+	def add(self, value):
+		self.sum += value
+		self.count += 1
+		self.min = value if self.min is None else min(value, self.min)
+		self.max = value if self.max is None else min(value, self.max)
+
+	def mean(self):
+		if self.count == 0:
+			return 0
+		return self.sum / self.count
 
 def benchmark(args, num_benchmark=50):
 
@@ -232,53 +282,54 @@ def benchmark(args, num_benchmark=50):
 	print()
 	print('Benchmarking %i runs...' % num_benchmark)
 	print()
+	print('Solution   Guesses   Time')
+	print()
+
+	duration_stats = RollingStats()
+	num_guesses_stats = RollingStats()
+	num_solved = 0
 
 	for idx in range(num_benchmark):
 
-		solution = pick_solution(args, deterministic_idx=idx)
+		solution = pick_solution(args, deterministic_idx=idx, do_print=False)
 
+		# TODO: benchmark time per guess (plus solver construction), in addition to total
+		# First guess should be fast, last guess may be fast as well; intermediate guess time is a more interesting stat
 		start_time = time.time()
-
-		# TODO: don't print anything, so this isn't slowed down by I/O
 
 		solver = Solver(
 			valid_solutions=(word_list.words if (args.all_words or args.agnostic) else word_list.solutions),
 			allowed_words=word_list.words,
 			complexity_limit=int(round(10.0 ** args.limit)),
-			debug_print=False
+			verbosity = SolverVerbosity.silent,
 		)
 
-		num_guesses = play_game(solution=solution, solver=solver, auto_solve=True, endless=True)
+		num_guesses = play_game(solution=solution, solver=solver, auto_solve=True, endless=True, silent=True)
 
 		end_time = time.time()
 		duration = end_time - start_time
 
 		solved = (0 < num_guesses <= 6)
+		if solved:
+			num_solved += 1
+
+		duration_stats.add(duration)
+		num_guesses_stats.add(num_guesses)
 
 		results.append(dict(solution=solution, num_guesses=num_guesses, duration=duration, solved=solved))
 
+		# TODO: Print with color (according to how bad it was)
+		print('%8s   %s%7i%s   %.3f' % (solution.upper(), get_format_for_num_guesses(num_guesses), num_guesses, Style.RESET_ALL, duration))
+
 	assert len(results) == num_benchmark
 
-	# TODO: figure out which solution had the worst benchmarks
-
-	avg_duration = sum([result['duration'] for result in results]) / len(results)
-	max_duration = max([result['duration'] for result in results])
-	min_duration = min([result['duration'] for result in results])
-
-	avg_guesses = sum([result['num_guesses'] for result in results]) / len(results)
-	max_guesses = max([result['num_guesses'] for result in results])
-	min_guesses = min([result['num_guesses'] for result in results])
-
-	num_solved = sum([result['solved'] for result in results])
+	# TODO: print which solution had the worst benchmarks
 
 	print()
 	print('Benchmarked %s runs:' % len(results))
-	for result in results:
-		print("  %s: %i guesses, %f seconds" % (result['solution'].upper(), result['num_guesses'], result['duration']))
-	print()
-	print('Solved %u/%u (%.1f%%)' % (num_solved, len(results), num_solved / len(results) * 100.0))
-	print('Guesses: min %i, average %.2f, max %i' % (min_guesses, avg_guesses, max_guesses))
-	print('Time: min %f, average %f, max %f' % (min_duration, avg_duration, max_duration))
+	print('  Solved %u/%u (%.1f%%)' % (num_solved, len(results), num_solved / len(results) * 100.0))
+	print('  Guesses: best %i, average %.2f, worst %i' % (num_guesses_stats.min, num_guesses_stats.mean(), num_guesses_stats.max))
+	print('  Time: worst %f, average %f, best %f' % (duration_stats.min, duration_stats.mean(), duration_stats.max))
 
 
 def main():
@@ -286,7 +337,7 @@ def main():
 	print('Wordle solver')
 
 	if args.benchmark:
-		benchmark(args)
+		benchmark(args, num_benchmark=args.benchmark)
 		return
 
 	solution = pick_solution(args)
@@ -295,7 +346,7 @@ def main():
 		valid_solutions=(word_list.words if (args.all_words or args.agnostic) else word_list.solutions),
 		allowed_words=word_list.words,
 		complexity_limit=int(round(10.0 ** args.limit)),
-		debug_print=args.debug
+		verbosity=(SolverVerbosity.debug if args.debug else SolverVerbosity.regular),
 	)
 
 	play_game(solution=solution, solver=solver, auto_solve=args.solve, endless=args.endless)

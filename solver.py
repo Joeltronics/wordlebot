@@ -1,23 +1,42 @@
 #!/usr/bin/env python3
 
 import collections
+from enum import Enum, unique
 from math import sqrt
 from typing import Tuple, Iterable, Optional
 
 from game_types import *
 
 
+@unique
+class SolverVerbosity(Enum):
+	silent = 0
+	regular = 1
+	debug = 2
+
+
 class Solver:
-	def __init__(self, valid_solutions: Iterable[str], allowed_words: Iterable[str], complexity_limit: int, debug_print=False):
-		self.guesses = []
-		self.allowed_words = allowed_words
+	def __init__(
+			self,
+			valid_solutions: Iterable[str],
+			allowed_words: Iterable[str],
+			complexity_limit: int,
+			verbosity=SolverVerbosity.regular):
+
 		self.possible_solutions = valid_solutions
-		self.solved_letters = [None] * 5
+		self.allowed_words = allowed_words
 		self.complexity_limit = complexity_limit
-		self.debug_print = debug_print
+		self.verbosity = verbosity
+
+		self.guesses = []
+		self.solved_letters = [None] * 5
+
+	def print(self, *args, **kwargs):
+		if self.verbosity.value > SolverVerbosity.silent.value:
+			print(*args, **kwargs)
 
 	def dprint(self, *args, **kwargs):
-		if self.debug_print:
+		if self.verbosity.value >= SolverVerbosity.debug.value:
 			print(*args, **kwargs)
 
 	def get_num_possible_solutions(self) -> int:
@@ -172,7 +191,7 @@ class Solver:
 		if num_guesses_to_try < num_possible_guesses and (
 				divide_solutions_to_check_possible > 1 or divide_solutions_to_check_num_remaining > 1
 		):
-			print(
+			self.print(
 				f'Checking {num_guesses_to_try:,}/{num_possible_guesses:,} guesses' +
 				f' ({num_guesses_to_try / len(self.allowed_words) * 100.0:.1f}%)' +
 				f' against {num_solutions_to_check_possible:,}/{num_possible_solutions:,} possible' +
@@ -181,14 +200,14 @@ class Solver:
 				f' {num_matches_to_check / total_num_matches * 100.0:.3f}% total matches)...'
 			)
 		elif num_guesses_to_try < num_possible_guesses:
-			print(
+			self.print(
 				f'Checking {num_guesses_to_try:,}/{num_possible_guesses:,} guesses' +
 				f' ({num_guesses_to_try / len(self.allowed_words) * 100.0:.1f}%)' +
 				f' against all {num_possible_solutions:,} solutions' +
 				f' ({num_matches_to_check:,}/{total_num_matches:,} total matches)...'
 			)
 		else:
-			print(
+			self.print(
 				f'Checking all {num_possible_guesses:,} words against all {num_possible_solutions:,} solutions' +
 				f' ({total_num_matches:,} total matches)...'
 			)
@@ -244,7 +263,7 @@ class Solver:
 
 		# Log it
 
-		print()
+		self.print()
 		self._log_pruning(num_guesses_to_try, divide_solutions_to_check_possible, divide_solutions_to_check_num_remaining)
 
 		self.dprint('Initial best candidates: ' + ' '.join([guess.upper() for guess in (
