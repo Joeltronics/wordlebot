@@ -4,50 +4,62 @@
 
 So far, there's a basic solver. It does a pretty good job, but it's far from perfect - there are lots of TODO comments in the code where it could be improved.
 
-Right now it will only play its own internal game, there's no way to use this to solve along with a real game of Wordle (at least, not yet)
+Right now it will only play its own internal game; there's no way (yet) to use this to solve along with a real game of Wordle.
+Though if you've already played a game of Wordle and want to see what the solver would have picked, you can run it with `-s <solution>` to have it play the same game.
 
 ## How does it work?
 
 For the first guess, choose whichever word uses the most common letters in the list of possible solutions.
 
 For all subsequent guesses, use whichever guess will best narrow down the remaining possible solutions.
-"Best" is difficult to quanitify here - there are a few different ways this could be chosen, most obviously worst-case (minimax), lowest average, or lowest mean-squared.
+"Best" is difficult to quanitify here - there are a few different ways this could be chosen, such as worst-case (minimax), lowest average, or lowest mean-squared.
 Currently it uses a weighted score of minimax & average, weighted heavily toward minimax.
 
-This has an O(n^3) complexity, so when there are still many possible solutions remaining, we prune the list of possible guesses, based on which use the most common remaining letters.
+This has an O(n^3) complexity, so when there are still many possible solutions remaining, we prune the search space.
+The main pruning is the list of possible guesses, based on which use the most common remaining letters.
+When the search space is very large, we also prune the list of possible solutions to check these guesses against.
 
 ## How could it be improved?
 
-The actual variable we want to optimize is which will solve with the fewest guesses.
 Solving for which guess will best narrow down the remaining possible solutions is a pretty good heuristic, but it's still not perfect.
+The actual variable we want to optimize is which guess will solve the puzzle with the fewest remaining guesses after.
 However, the current algorithm is already slow enough; making the algorithm look ahead to future guesses would significantly increase the complexity.
 But it would be worth exploring this when there are few remaining.
 
-This hasn't really been benchmarked - most elements of the algorithm were just chosen based on intuition, not actual data.
-It would be good to profile this, and optimize the various tradeoffs for what has the actual best results.
+The guess pruning algorithm itself could stand to be improved - right now it just looks for most common unsolved letters
+in words, but doesn't account for letter position, yellow letters, or multiple of the same letter in the word.
 
-Right now we only prune guesses; I suspect that when we are not yet close to a solution, there could be great performance improvements with little drawback by only comparing against a limited subset of the possible solutions as well.
-And since we're only reducing one of the 3 numbers that multiply up to that O(n^3) complexity, the existing pruning doesn't improve performance as much as intended, either (i.e. ideally every guess should take around the same amount of time regardless of total solution space size).
-
-The guess pruning algorithm itself could also stand to be improved - right now it just looks for most common unsolved letters in words, but doesn't account for letter position, yellow letters, or multiple of the same letter in the word.
+The pruning of solutions to check against is also very basic - the goal is to remove solutions that are most similar to
+existing solutions, which is currently achieved by just sorting the list and taking every N results.
+This is an _okay_ way of accomplishing this goal, but it could definitely be improved.
 
 The code isn't really optimized, and there could be some potential performance gains there.
 This is just a quick project from a few evenings of work, so the code quality is definitely not perfect either.
+
+Various tradeoffs have been chosen based on intuition, not actual results.
+It would be good to profile this, and optimize the various tradeoffs for what has the actual best results.
+There is a basic benchmarking mode implemented, but so far I haven't really used it to check performance.
+Tradeoffs that should be based off of actual data:
+
+* Base score of which is the best guess (minimax vs average vs mean-squared)
+* Score bonus for guesses that are also possible solutions
+* When pruning the search space, how to prioritize pruning guesses vs pruning solutions to check against
+* Deciding which guesses to prune
 
 ## FAQ
 
 ### Doesn't this take the fun out of Wordle?
 
-My goal is to have fun writing a solver, not to write something that will replace playing Wordle for me.
-I still enjoy playing Wordle the old fashined way.
-No, writing a solver hasn't ruined it for me - the solver's advantages are that it has a perfect vocabulary, and can try every possible combo of remaining words, neither of which a human could do.
+I still enjoy playing Wordle the old-fashioned way!
+My goal here is to have fun writing a solver, not to write something that will replace playing Wordle. 
+The solver's advantages are that it has a perfect vocabulary, and can try millions of combos of remaining words, neither of which I could do.
 
 ### Is it "cheating" to have the solver know the full Wordle solution list?
 
 I mean, any solver is already "cheating" :wink:
 
 But yeah, I kind of consider this cheating.
-My ideal goal is to have this solver have the same information a normal player would have (at least, one who didn't look at the source code).
+My ideal goal is to have this solver have the same information a normal player (who didn't look at the source code) would have.
 Originally I was thinking this meant not using the official Wordle list whatsoever, and using a different standard word list such as the English Open Word List - but then I realized this could lead to situations where it might try to guess an invalid word.
 So I pretty much had to at least use the list of valid words - though not necessarily knowing the list of possible solutions.
 
@@ -55,9 +67,13 @@ However, there's still a problem with only using the full valid words list: it's
 This solver is much faster if it has fewer possible solutions it needs to look for.
 So in the end, I made it aware of the solutions list.
 But I left an option to run the original solution-list-agnostic idea, using the `--agnostic` argument.
-I may revisit the default behavior in the future.
+I may revisit which is the default behavior again in the future.
+
+Running `--benchmark` under the current default behavior (`-l 6`, which limits the search space to 1,000,000 combos per guess):
+* Without `--agnostic`, solves 100% (out of 50 puzzles), with an average of 3.46 guesses, worst case 5, average time 10.8 seconds per puzzle on my laptop
+* With `--agnostic`, still solves 100%, but the average goes up to 4.20 guesses, the worst case 6, and the average time 12.9 seconds (mostly due to needing more average guesses)
 
 ### Why do green letters appear yellow, and yellow letters appear grey?
 
 This seems to be a problem with the default Windows Powershell colors.
-Using cmd or WSL should give you the correct colors.
+If using Windows, using cmd or WSL should give you the correct colors.

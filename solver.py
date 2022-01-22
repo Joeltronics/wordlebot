@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import collections
+from math import sqrt
 from typing import Tuple, Iterable, Optional
 
 from game_types import *
@@ -79,7 +80,7 @@ class Solver:
 
 		# Prune based on occurrence of most common unsolved letters
 
-		# TODO: this doesn't take letter position into account
+		# TODO: this doesn't take letter position (nor yellow letters) into account
 
 		counter = self.get_unsolved_letters_counter()
 		
@@ -99,6 +100,100 @@ class Solver:
 
 		return guesses
 
+	def _determine_prune_counts(self, max_num_matches: Optional[int]) -> Tuple[int, int, int]:
+		"""
+		Determine how many guesses & solutions to prune
+
+		:return: (number of guesses, divisor for solutions to check possible, divisor for solutions to check remaining)
+		"""
+
+		num_allowed_words = len(self.allowed_words)
+		num_possible_solutions = len(self.possible_solutions)
+		total_num_matches = num_allowed_words * num_possible_solutions * num_possible_solutions
+
+		if max_num_matches is None:
+			return num_allowed_words, 1, 1
+
+		# First, figure out how many solutions to prune
+
+		# Target trying 10% of possible guesses - if we're under, then prune solutions too
+		target_guess_ratio = 0.1
+
+		"""
+		If there are very few possible solutions left, bias toward trimming guesses instead of solutions
+		Especially prioritize this for num_remaining check which is extra sensitive to low numbers
+
+		max_divide_possible:
+		  >= 16 solutions left: worst case, check 1/4 of solutions
+		  12-15 solutions left: worst case, check 1/3 of solutions
+		  8-11 solutions left: worst case, check 1/2 of solutions
+		  <= 7 solutions left: always check all solutions
+
+		max_divide_num_remaining:
+		  >= 32 solutions left: worst case, check 1/4 of solutions
+		  24-31 solutions left: worst case, check 1/3 of solutions
+		  16-23 solutions left: worst case, check 1/2 of solutions
+		  <= 15 solutions left: always check all solutions
+		"""
+		max_divide_possible = min(4, max(num_possible_solutions // 4, 1))
+		max_divide_num_remaining = min(4, max(num_possible_solutions // 8, 1))
+
+		ideal_total_division = target_guess_ratio * total_num_matches / max_num_matches
+		ideal_division = int(round(sqrt(ideal_total_division)))
+
+		# TODO: these two don't have to be equal (even beyond having separate maximums)
+		# e.g. if ideal_total_division is 6, could do 3 & 2, rather than the current logic of 2 & 2
+		divide_solutions_to_check_possible = max(min(ideal_division, max_divide_possible), 1)
+		divide_solutions_to_check_num_remaining = max(min(ideal_division, max_divide_num_remaining), 1)
+
+		# Now figure out how many guesses to try to be below total matches target
+
+		num_solutions_to_check_possible = num_possible_solutions // divide_solutions_to_check_possible
+		num_solutions_to_check_num_remaining = num_possible_solutions // divide_solutions_to_check_num_remaining
+
+		num_guesses_to_try = max_num_matches // (
+					num_solutions_to_check_possible * num_solutions_to_check_num_remaining) if (
+					max_num_matches is not None) else None
+		num_guesses_to_try = max(1, num_guesses_to_try)
+
+		return num_guesses_to_try, divide_solutions_to_check_possible, divide_solutions_to_check_num_remaining
+
+	def _log_pruning(self, num_guesses_to_try, divide_solutions_to_check_possible, divide_solutions_to_check_num_remaining) -> None:
+
+		num_possible_guesses = len(self.allowed_words)
+		num_possible_solutions = len(self.possible_solutions)
+
+		total_num_matches = len(self.allowed_words) * num_possible_solutions * num_possible_solutions
+		num_solutions_to_check_possible = num_possible_solutions // divide_solutions_to_check_possible
+		num_solutions_to_check_num_remaining = num_possible_solutions // divide_solutions_to_check_num_remaining
+
+		num_matches_to_check = num_guesses_to_try * num_solutions_to_check_possible * num_solutions_to_check_num_remaining
+
+		if num_guesses_to_try < num_possible_guesses and (
+				divide_solutions_to_check_possible > 1 or divide_solutions_to_check_num_remaining > 1
+		):
+			print(
+				f'Checking {num_guesses_to_try:,}/{num_possible_guesses:,} guesses' +
+				f' ({num_guesses_to_try / len(self.allowed_words) * 100.0:.1f}%)' +
+				f' against {num_solutions_to_check_possible:,}/{num_possible_solutions:,} possible' +
+				f' and {num_solutions_to_check_num_remaining:,}/{num_possible_solutions:,} remaining' +
+				f' ({num_matches_to_check:,}/{total_num_matches:,} =' +
+				f' {num_matches_to_check / total_num_matches * 100.0:.3f}% total matches)...'
+			)
+		elif num_guesses_to_try < num_possible_guesses:
+			print(
+				f'Checking {num_guesses_to_try:,}/{num_possible_guesses:,} guesses' +
+				f' ({num_guesses_to_try / len(self.allowed_words) * 100.0:.1f}%)' +
+				f' against all {num_possible_solutions:,} solutions' +
+				f' ({num_matches_to_check:,}/{total_num_matches:,} total matches)...'
+			)
+		else:
+			print(
+				f'Checking all {num_possible_guesses:,} words against all {num_possible_solutions:,} solutions' +
+				f' ({total_num_matches:,} total matches)...'
+			)
+
+
 	def _brute_force_guess_for_fewest_remaining_words(self, max_num_matches: Optional[int] = None) -> str:
 		"""
 		"""
@@ -109,49 +204,56 @@ class Solver:
 		  2. in _brute_force_guess_for_fewest_remaining_words_list(), loop over solutions_to_check_possible
 		  3. in _num_solutions_remaining(), another loop over solutions_to_check_num_remaining
 		"""
-		num_allowed_words = len(self.allowed_words)
-		num_possible_solutions = len(self.possible_solutions)
-		total_num_matches = num_allowed_words * num_possible_solutions * num_possible_solutions
 
-		# The maximum number of guesses that we can try without hitting max_num_matches
-		max_num_guesses_to_try = max_num_matches // (num_possible_solutions * num_possible_solutions) if (max_num_matches is not None) else None
-		max_num_guesses_to_try = max(1, max_num_guesses_to_try)
+		# Figure out how much to prune
 
-		print('Brute forcing based on fewest remaining words; %u * %u * %u = %g possible combos to check' % (
-			len(self.allowed_words), len(self.possible_solutions), len(self.possible_solutions), total_num_matches,
-		))
+		if max_num_matches is None:
+			num_guesses_to_try = len(self.possible_solutions)
+			divide_solutions_to_check_possible = 1
+			divide_solutions_to_check_num_remaining= 1
+		else:
+			num_guesses_to_try, divide_solutions_to_check_possible, divide_solutions_to_check_num_remaining = \
+				self._determine_prune_counts(max_num_matches=max_num_matches)
+
+		# Do the pruning
 
 		guesses_to_try = list(self.allowed_words)
+		guesses_to_try = self._prune_and_sort_guesses(
+			guesses_to_try,
+			num_guesses_to_try if len(guesses_to_try) > num_guesses_to_try else None,
+		)
 
-		if (max_num_guesses_to_try is not None) and len(guesses_to_try) > max_num_guesses_to_try:
+		"""
+		For pruning the solutions to check possible/against, ideally we want to prune out solutions that are the most
+		similar to other solutions in the list.
+		
+		Right now we accomplish this by taking every N from the sorted list, which works decently, though obviously it's
+		biased toward the start of the word being similar, not the end
+		
+		TODO: smarter pruning than this
+		"""
+		solutions_sorted = sorted(list(self.possible_solutions))
 
-			print('Pruning guesses from non-possible solutions. Trying %u/%u guesses (%.1f%%)' % (
-				max_num_guesses_to_try,
-				len(guesses_to_try),
-				max_num_guesses_to_try / len(guesses_to_try) * 100.0
-			))
+		solutions_to_check_possible = solutions_sorted
+		if divide_solutions_to_check_possible > 1:
+			solutions_to_check_possible = solutions_to_check_possible[0::divide_solutions_to_check_possible]
 
-			guesses_to_try = self._prune_and_sort_guesses(guesses_to_try, max_num_guesses_to_try)
-		else:
-			print('No pruning; trying all %u words' % len(guesses_to_try))
-			guesses_to_try = self._prune_and_sort_guesses(guesses_to_try, None)
+		solutions_to_check_num_remaining = solutions_sorted
+		if divide_solutions_to_check_num_remaining > 1:
+			solutions_to_check_num_remaining = solutions_to_check_num_remaining[1::divide_solutions_to_check_num_remaining]
 
-		# TODO: prune these too when we're way over the limit, not just guesses
-		solutions_to_check_possible = self.possible_solutions
-		solutions_to_check_num_remaining = self.possible_solutions
+		# Log it
 
 		print()
-		print('Checking %u possible solutions (%u * %u * %u = %u matches to check...)' % (
-			len(guesses_to_try),
-			len(guesses_to_try),
-			len(solutions_to_check_possible),
-			len(solutions_to_check_num_remaining),
-			len(guesses_to_try) * len(solutions_to_check_possible) * len(solutions_to_check_num_remaining),
-		))
+		self._log_pruning(num_guesses_to_try, divide_solutions_to_check_possible, divide_solutions_to_check_num_remaining)
+
 		self.dprint('Initial best candidates: ' + ' '.join([guess.upper() for guess in (
 			guesses_to_try[:5] if len(guesses_to_try) > 5 else guesses_to_try
 		)]))
-		ret, score = self._brute_force_guess_for_fewest_remaining_words_list(
+
+		# Process the pruned lists
+
+		ret, score = self._brute_force_guess_for_fewest_remaining_words_from_lists(
 			guesses=guesses_to_try,
 			solutions_to_check_possible=solutions_to_check_possible,
 			solutions_to_check_num_remaining=solutions_to_check_num_remaining)
@@ -159,7 +261,7 @@ class Solver:
 		return ret
 
 
-	def _brute_force_guess_for_fewest_remaining_words_list(
+	def _brute_force_guess_for_fewest_remaining_words_from_lists(
 			self,
 			guesses: Iterable[str],
 			solutions_to_check_possible: Iterable[str] = None,
@@ -172,6 +274,9 @@ class Solver:
 		if solutions_to_check_num_remaining is None:
 			solutions_to_check_num_remaining = self.possible_solutions
 
+		solutions_to_check_possible_ratio = len(self.possible_solutions) / len(solutions_to_check_num_remaining)
+		assert solutions_to_check_possible_ratio >= 1.0
+
 		# Take every possible valid guess, and run it against every possible remaining valid word, figure
 		lowest_average = None
 		lowest_max = None
@@ -182,7 +287,7 @@ class Solver:
 			# Slightly prioritize possible solutions
 			is_possible_solution = guess in self.possible_solutions
 
-			if (guess_idx + 1) % 1000 == 0:
+			if (guess_idx + 1) % 200 == 0:
 				self.dprint('%i/%i...' % (guess_idx+1, len(guesses)))
 
 			max_words_remaining = None
@@ -192,8 +297,13 @@ class Solver:
 				sum_words_remaining += words_remaining
 				max_words_remaining = max(words_remaining, max_words_remaining) if (max_words_remaining is not None) else words_remaining
 
-			average_words_remaining = sum_words_remaining / len(solutions_to_check_possible)
+			average_words_remaining = \
+				sum_words_remaining / len(solutions_to_check_possible) * solutions_to_check_possible_ratio
 
+			max_words_remaining = int(round(max_words_remaining * solutions_to_check_possible_ratio))
+
+			# TODO: when solutions_to_check_possible_ratio > 1, max will be inaccurate; weight it lower
+			# TODO: try mean-squared average, this may be a better metric
 			score = (10 * max_words_remaining) + average_words_remaining + (0 if is_possible_solution else 5)
 
 			is_lowest_average = lowest_average is None or average_words_remaining < lowest_average
