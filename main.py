@@ -5,7 +5,10 @@ colorama.init()
 
 import argparse
 from colorama import Fore, Back, Style
+from copy import copy
 import itertools
+from math import sqrt
+from statistics import median
 import time
 from typing import Iterable, Optional
 import random
@@ -22,18 +25,22 @@ FORMAT_WRONG_POSITION = Back.YELLOW + Fore.WHITE
 FORMAT_NOT_IN_SOLUTION = Back.WHITE + Fore.BLACK
 
 
+DEFAULT_NUM_BENCHMARK = 50
+
+
 def parse_args():
 	parser = argparse.ArgumentParser()
 
 	parser.add_argument('-s', dest='solution', type=str, default=None, help='Specify a solution')
 	parser.add_argument(
-		'-l', dest='limit', type=float, default=6,
-		help='Limit solver search space complexity (i.e. higher will do a better job of solving, but run much slower). Specified as a power of 10. Default 6.')
+		'-l', dest='limit', type=float, default=4,
+		help='Limit solver search space complexity (i.e. higher will do a better job of solving, but run much slower). Specified as a power of 10. Default 4.')
 	parser.add_argument(
 		'-b', metavar='RUNS', dest='benchmark', type=int, default=None,
 		help='Benchmark performance')
 
-	parser.add_argument('--benchmark', dest='benchmark', action='store_const', const=50, help='Equivalent to -b 50')
+	parser.add_argument('--benchmark', dest='benchmark', action='store_const', const=DEFAULT_NUM_BENCHMARK, help='Equivalent to -b %i' % DEFAULT_NUM_BENCHMARK)
+	parser.add_argument('--ab', dest='a_b_test', action='store_true', help='Benchmark A/B test (currently hard-coded to compare --agnostic against not)')
 	parser.add_argument('--all-words', action='store_true', help='Allow all valid words as solutions, not just limited set')
 	parser.add_argument('--agnostic', action='store_true', help='Make solver unaware of limited set of possible solutions')
 	parser.add_argument('--solve', action='store_true', help="Automatically use solver's guess")
@@ -260,84 +267,160 @@ def play_game(solution, solver: Solver, auto_solve: bool, endless=False, silent=
 class RollingStats:
 	def __init__(self):
 		self.sum = 0
+		self.squared_sum = 0
 		self.count = 0
 		self.min = None
 		self.max = None
+		self.values = []
 
 	def add(self, value):
 		self.sum += value
+		self.squared_sum += value * value
 		self.count += 1
 		self.min = value if self.min is None else min(value, self.min)
-		self.max = value if self.max is None else min(value, self.max)
+		self.max = value if self.max is None else max(value, self.max)
+		self.values.append(value)
 
 	def mean(self):
 		if self.count == 0:
 			return 0
 		return self.sum / self.count
 
-def benchmark(args, num_benchmark=50):
+	def mean_squared(self):
+		if self.count == 0:
+			return 0
+		return self.squared_sum / self.count
+
+	def rms(self):
+		return sqrt(self.mean_squared())
+
+	def median(self):
+		if self.count == 0:
+			return 0
+		return median(self.values)
+
+class ABTestInstance:
+	def __init__(self, name: Optional[str] = None, solver_args: Optional[dict] = None):
+		self.name = name
+		self.solver_args = solver_args if solver_args is not None else dict()
+		self.num_guesses_stats = RollingStats()
+		self.duration_stats = RollingStats()
+		self.num_solved = 0
+
+	def add_result(self, num_guesses: int, duration: float):
+		solved = (0 < num_guesses <= 6)
+		self.num_guesses_stats.add(num_guesses)
+		self.duration_stats.add(duration)
+		if solved:
+			self.num_solved += 1
+
+
+def benchmark(args, a_b_test: bool, num_benchmark=50):
 
 	results = []
-
-	print()
-	print('Benchmarking %i runs...' % num_benchmark)
-	print()
-	print('Solution   Guesses   Time')
-	print()
 
 	duration_stats = RollingStats()
 	num_guesses_stats = RollingStats()
 	num_solved = 0
 
-	for idx in range(num_benchmark):
+	default_solver_args = dict(
+		valid_solutions=(word_list.words if (args.all_words or args.agnostic) else word_list.solutions),
+		allowed_words=word_list.words,
+		complexity_limit=int(round(10.0 ** args.limit)),
+		verbosity=SolverVerbosity.silent,
+	)
 
-		solution = pick_solution(args, deterministic_idx=idx, do_print=False)
+	if a_b_test:
+		a_b_tests = [
+			ABTestInstance(name='Agnostic', solver_args=dict(valid_solutions=word_list.words)),
+			ABTestInstance(name='Knowledgeable', solver_args=dict(valid_solutions=word_list.solutions)),
 
-		# TODO: benchmark time per guess (plus solver construction), in addition to total
-		# First guess should be fast, last guess may be fast as well; intermediate guess time is a more interesting stat
-		start_time = time.time()
-
-		solver = Solver(
-			valid_solutions=(word_list.words if (args.all_words or args.agnostic) else word_list.solutions),
-			allowed_words=word_list.words,
-			complexity_limit=int(round(10.0 ** args.limit)),
-			verbosity = SolverVerbosity.silent,
-		)
-
-		num_guesses = play_game(solution=solution, solver=solver, auto_solve=True, endless=True, silent=True)
-
-		end_time = time.time()
-		duration = end_time - start_time
-
-		solved = (0 < num_guesses <= 6)
-		if solved:
-			num_solved += 1
-
-		duration_stats.add(duration)
-		num_guesses_stats.add(num_guesses)
-
-		results.append(dict(solution=solution, num_guesses=num_guesses, duration=duration, solved=solved))
-
-		# TODO: Print with color (according to how bad it was)
-		print('%8s   %s%7i%s   %.3f' % (solution.upper(), get_format_for_num_guesses(num_guesses), num_guesses, Style.RESET_ALL, duration))
-
-	assert len(results) == num_benchmark
-
-	# TODO: print which solution had the worst benchmarks
+			#ABTestInstance(name='Complexity 1,000', solver_args=dict(complexity_limit=1000)),
+			#ABTestInstance(name='Complexity 100,000', solver_args=dict(complexity_limit=100000)),
+		]
+	else:
+		a_b_tests = [
+			ABTestInstance()
+		]
 
 	print()
-	print('Benchmarked %s runs:' % len(results))
-	print('  Solved %u/%u (%.1f%%)' % (num_solved, len(results), num_solved / len(results) * 100.0))
-	print('  Guesses: best %i, average %.2f, worst %i' % (num_guesses_stats.min, num_guesses_stats.mean(), num_guesses_stats.max))
-	print('  Time: worst %f, average %f, best %f' % (duration_stats.min, duration_stats.mean(), duration_stats.max))
+	print('Benchmarking %i runs...' % num_benchmark)
+	print()
+	if len(a_b_tests) > 1:
+		print('        ' + ''.join(['   %-15s' % test.name for test in a_b_tests]))
+		print('Solution' + ('   Guesses    Time' * len(a_b_tests)))
+	else:
+		print('Solution   Guesses    Time')
+	print()
+
+	for solution_idx in range(num_benchmark):
+
+		solution = pick_solution(args, deterministic_idx=solution_idx, do_print=False)
+
+		results_per_solver = []
+
+		for a_b_test in a_b_tests:
+			this_solver_args = copy(default_solver_args)
+			this_solver_args.update(a_b_test.solver_args)
+
+			# TODO: benchmark time per guess (plus solver construction), in addition to total
+			# First guess should be fast, last guess may be fast as well; intermediate guess time is a more interesting stat
+			start_time = time.time()
+
+			solver = Solver(**this_solver_args)
+			num_guesses = play_game(solution=solution, solver=solver, auto_solve=True, endless=True, silent=True)
+
+			end_time = time.time()
+			duration = end_time - start_time
+
+			solved = (0 < num_guesses <= 6)
+			if solved:
+				num_solved += 1
+
+			a_b_test.add_result(num_guesses=num_guesses, duration=duration)
+			results_per_solver.append((num_guesses, duration))
+
+		print_str = '%8s' % solution.upper()
+
+		for num_guesses, duration in results_per_solver:
+			print_str += '   %s%7i%s   %.3f' % (
+				get_format_for_num_guesses(num_guesses), num_guesses, Style.RESET_ALL,
+				duration
+			)
+
+		print(print_str)
+
+	# TODO: print which solution had the worst benchmarks
+	# TODO: for A/B testing, print scores of one vs the other
+
+	print()
+	print('Benchmarked %s runs:' % num_benchmark)
+
+	for a_b_test in a_b_tests:
+		if len(a_b_tests) > 1:
+			print()
+			print('%s:' % a_b_test.name)
+		print('  Solved %u/%u (%.1f%%)' % (a_b_test.num_solved, num_benchmark, a_b_test.num_solved / num_benchmark * 100.0))
+		print('  Guesses: best %i, median %g, mean %.2f, RMS %.2f, worst %i' % (
+			a_b_test.num_guesses_stats.min,
+			a_b_test.num_guesses_stats.median(),
+			a_b_test.num_guesses_stats.mean(),
+			a_b_test.num_guesses_stats.rms(),
+			a_b_test.num_guesses_stats.max))
+		print('  Time: best %.3f, median %.3f, mean %.3f, RMS %.3f, worst %.3f' % (
+			a_b_test.duration_stats.min,
+			a_b_test.duration_stats.median(),
+			a_b_test.duration_stats.mean(),
+			a_b_test.duration_stats.rms(),
+			a_b_test.duration_stats.max))
 
 
 def main():
 	args = parse_args()
 	print('Wordle solver')
 
-	if args.benchmark:
-		benchmark(args, num_benchmark=args.benchmark)
+	if args.benchmark or args.a_b_test:
+		benchmark(args, a_b_test=args.a_b_test, num_benchmark=(args.benchmark if args.benchmark else DEFAULT_NUM_BENCHMARK))
 		return
 
 	solution = pick_solution(args)
