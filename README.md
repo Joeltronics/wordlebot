@@ -36,15 +36,10 @@ This is an _okay_ way of accomplishing this goal, but it could definitely be imp
 The code isn't really optimized, and there could be some potential performance gains there.
 This is just a quick project from a few evenings of work, so the code quality is definitely not perfect either.
 
-Various tradeoffs have been chosen based on intuition, not actual results.
-It would be good to profile this, and optimize the various tradeoffs for what has the actual best results.
-There is a basic benchmarking mode implemented, but so far I haven't really used it to check performance.
-Tradeoffs that should be based off of actual data:
-
-* Base score of which is the best guess (minimax vs average vs mean-squared)
-* Score bonus for guesses that are also possible solutions
-* When pruning the search space, how to prioritize pruning guesses vs pruning solutions to check against
-* Deciding which guesses to prune
+There are various optimization parameters in the SolverParams dataclass, which can be tweaked to make different tradeoffs.
+So far, these have been chosen based on what seems make sense, not on actual results.
+There's a benchmarking/A-B testing mode that could be used to fine tune these parameters for best results, but so far I haven't done this.
+It's still a bit early to optimize these parameters - it doesn't really make sense to fine tune them now if there are more algorithm changes still to come. 
 
 ## FAQ
 

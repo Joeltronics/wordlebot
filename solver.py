@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import collections
+from dataclasses import dataclass
 from enum import Enum, unique
 from math import sqrt
 from typing import Tuple, Iterable, Optional
@@ -15,17 +16,57 @@ class SolverVerbosity(Enum):
 	debug = 2
 
 
+@dataclass(frozen=True)
+class SolverParams:
+
+	# "Best solution" score weights
+
+	score_weight_mean = 1
+	score_weight_mean_squared = 0
+	score_weight_max = 10
+	score_penalty_non_solution = 5
+
+	# Pruning
+
+	# Ratio of possible guesses to target - if under, then prune solutions too
+	prune_target_guess_ratio = 0.1
+
+	# Pruning possible solutions to check against
+	# Base divisor is number of solutions remaining divided by this
+	prune_divide_possible_num_solutions_divisor = 4
+	# Always take at least 1/4 of possible
+	prune_divide_possible_max = 4
+
+	# Pruning possible solutions to check how many remain
+	# Base divisor is number of solutions remaining divided by this
+	prune_divide_num_remaining_num_solutions_divisor = 8
+	# Always take at least 1/4 of possible
+	prune_divide_num_remaining_max = 4
+
+
+def clip(value, range):
+	return min(
+		range[1],
+		max(
+			value,
+			range[0]
+		)
+	)
+
+
 class Solver:
 	def __init__(
 			self,
 			valid_solutions: Iterable[str],
 			allowed_words: Iterable[str],
 			complexity_limit: int,
+			params=SolverParams(),
 			verbosity=SolverVerbosity.regular):
 
 		self.possible_solutions = valid_solutions
 		self.allowed_words = allowed_words
 		self.complexity_limit = complexity_limit
+		self.params = params
 		self.verbosity = verbosity
 
 		self.guesses = []
@@ -135,35 +176,43 @@ class Solver:
 
 		# First, figure out how many solutions to prune
 
-		# Target trying 10% of possible guesses - if we're under, then prune solutions too
-		target_guess_ratio = 0.1
+		if not self.params.prune_target_guess_ratio:
+			divide_solutions_to_check_possible = 1
+			divide_solutions_to_check_num_remaining = 1
 
-		"""
-		If there are very few possible solutions left, bias toward trimming guesses instead of solutions
-		Especially prioritize this for num_remaining check which is extra sensitive to low numbers
+		else:
+			"""
+			If there are very few possible solutions left, bias toward trimming guesses instead of solutions
+			Especially prioritize this for num_remaining check which is extra sensitive to low numbers
+	
+			max_divide_possible (default max 4, divisor 4):
+			  >= 16 solutions left: worst case, check 1/4 of solutions
+			  12-15 solutions left: worst case, check 1/3 of solutions
+			  8-11 solutions left: worst case, check 1/2 of solutions
+			  <= 7 solutions left: always check all solutions
+	
+			max_divide_num_remaining (default max 4, divisor 8):
+			  >= 32 solutions left: worst case, check 1/4 of solutions
+			  24-31 solutions left: worst case, check 1/3 of solutions
+			  16-23 solutions left: worst case, check 1/2 of solutions
+			  <= 15 solutions left: always check all solutions
+			"""
+			max_divide_possible = clip(
+				num_possible_solutions // self.params.prune_divide_possible_num_solutions_divisor,
+				(1, self.params.prune_divide_possible_max)
+			)
+			max_divide_num_remaining = clip(
+				num_possible_solutions // self.params.prune_divide_num_remaining_num_solutions_divisor,
+				(1, self.params.prune_divide_num_remaining_max)
+			)
 
-		max_divide_possible:
-		  >= 16 solutions left: worst case, check 1/4 of solutions
-		  12-15 solutions left: worst case, check 1/3 of solutions
-		  8-11 solutions left: worst case, check 1/2 of solutions
-		  <= 7 solutions left: always check all solutions
+			ideal_total_division = self.params.prune_target_guess_ratio * total_num_matches / max_num_matches
+			ideal_division = int(round(sqrt(ideal_total_division)))
 
-		max_divide_num_remaining:
-		  >= 32 solutions left: worst case, check 1/4 of solutions
-		  24-31 solutions left: worst case, check 1/3 of solutions
-		  16-23 solutions left: worst case, check 1/2 of solutions
-		  <= 15 solutions left: always check all solutions
-		"""
-		max_divide_possible = min(4, max(num_possible_solutions // 4, 1))
-		max_divide_num_remaining = min(4, max(num_possible_solutions // 8, 1))
-
-		ideal_total_division = target_guess_ratio * total_num_matches / max_num_matches
-		ideal_division = int(round(sqrt(ideal_total_division)))
-
-		# TODO: these two don't have to be equal (even beyond having separate maximums)
-		# e.g. if ideal_total_division is 6, could do 3 & 2, rather than the current logic of 2 & 2
-		divide_solutions_to_check_possible = max(min(ideal_division, max_divide_possible), 1)
-		divide_solutions_to_check_num_remaining = max(min(ideal_division, max_divide_num_remaining), 1)
+			# TODO: these two don't have to be equal (even beyond having separate maximums)
+			# e.g. if ideal_total_division is 6, could do 3 & 2, rather than the current logic of 2 & 2
+			divide_solutions_to_check_possible = max(min(ideal_division, max_divide_possible), 1)
+			divide_solutions_to_check_num_remaining = max(min(ideal_division, max_divide_num_remaining), 1)
 
 		# Now figure out how many guesses to try to be below total matches target
 
@@ -311,26 +360,35 @@ class Solver:
 
 			max_words_remaining = None
 			sum_words_remaining = 0
+			sum_squared = 0
 			for possible_solution in solutions_to_check_possible:
 				words_remaining = self._num_solutions_remaining(guess, possible_solution, solutions=solutions_to_check_num_remaining)
 				sum_words_remaining += words_remaining
+				sum_squared += (words_remaining ** 2)
 				max_words_remaining = max(words_remaining, max_words_remaining) if (max_words_remaining is not None) else words_remaining
 
-			average_words_remaining = \
+			mean_squared_words_remaining = \
+				sum_squared / len(solutions_to_check_possible) * solutions_to_check_possible_ratio
+
+			mean_words_remaining = \
 				sum_words_remaining / len(solutions_to_check_possible) * solutions_to_check_possible_ratio
 
 			max_words_remaining = int(round(max_words_remaining * solutions_to_check_possible_ratio))
 
 			# TODO: when solutions_to_check_possible_ratio > 1, max will be inaccurate; weight it lower
 			# TODO: try mean-squared average, this may be a better metric
-			score = (10 * max_words_remaining) + average_words_remaining + (0 if is_possible_solution else 5)
+			score = \
+				(self.params.score_weight_max * max_words_remaining) + \
+				(self.params.score_weight_mean * mean_words_remaining) + \
+				(self.params.score_weight_mean_squared * mean_squared_words_remaining) + \
+				(0 if is_possible_solution else self.params.score_penalty_non_solution)
 
-			is_lowest_average = lowest_average is None or average_words_remaining < lowest_average
+			is_lowest_average = lowest_average is None or mean_words_remaining < lowest_average
 			is_lowest_max = lowest_max is None or max_words_remaining < lowest_max
 			is_lowest_score = lowest_score is None or score < lowest_score
 
 			if is_lowest_average:
-				lowest_average = average_words_remaining
+				lowest_average = mean_words_remaining
 
 			if is_lowest_max:
 				lowest_max = max_words_remaining
@@ -342,14 +400,14 @@ class Solver:
 					guess_idx + 1, len(guesses),
 					guess.upper(),
 					score,
-					average_words_remaining, lowest_average,
+					mean_words_remaining, lowest_average,
 					max_words_remaining, lowest_max,
 				))
 
 			if is_lowest_average and not is_lowest_score:
 				self.dprint('New lowest average (%u/%u): %s, average %.2f (score %.2f)' % (
 					guess_idx + 1, len(guesses),
-					guess.upper(), average_words_remaining, score
+					guess.upper(), mean_words_remaining, score
 				))
 
 			if is_lowest_max and not is_lowest_score:
