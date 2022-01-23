@@ -342,6 +342,8 @@ class Solver:
 		if solutions_to_check_num_remaining is None:
 			solutions_to_check_num_remaining = self.possible_solutions
 
+		assert len(solutions_to_check_num_remaining) <= len(self.possible_solutions)
+		limited_solutions_to_check_possible = len(self.possible_solutions) != len(solutions_to_check_num_remaining)
 		solutions_to_check_possible_ratio = len(self.possible_solutions) / len(solutions_to_check_num_remaining)
 		assert solutions_to_check_possible_ratio >= 1.0
 
@@ -376,12 +378,19 @@ class Solver:
 			max_words_remaining = int(round(max_words_remaining * solutions_to_check_possible_ratio))
 
 			# TODO: when solutions_to_check_possible_ratio > 1, max will be inaccurate; weight it lower
-			# TODO: try mean-squared average, this may be a better metric
 			score = \
 				(self.params.score_weight_max * max_words_remaining) + \
 				(self.params.score_weight_mean * mean_words_remaining) + \
 				(self.params.score_weight_mean_squared * mean_squared_words_remaining) + \
 				(0 if is_possible_solution else self.params.score_penalty_non_solution)
+
+			if (not limited_solutions_to_check_possible) and (max_words_remaining == 1) and is_possible_solution:
+				# Can't possibly do any better than this, so don't bother processing any further
+				self.dprint('%u/%u: Found optimal guess %s; not searching any further' % (
+					guess_idx + 1, len(guesses), guess.upper()))
+				best_guess = guess
+				lowest_score = score
+				break
 
 			is_lowest_average = lowest_average is None or mean_words_remaining < lowest_average
 			is_lowest_max = lowest_max is None or max_words_remaining < lowest_max
@@ -396,7 +405,7 @@ class Solver:
 			if is_lowest_score:
 				best_guess = guess
 				lowest_score = score
-				self.dprint('Best so far (%u/%u): %s, score %.2f (average %.2f, lowest %.2f / worst case %i, lowest %i)' % (
+				self.dprint('%u/%u: Best so far: %s, score %.2f (average %.2f, lowest %.2f / worst case %i, lowest %i)' % (
 					guess_idx + 1, len(guesses),
 					guess.upper(),
 					score,
@@ -405,13 +414,13 @@ class Solver:
 				))
 
 			if is_lowest_average and not is_lowest_score:
-				self.dprint('New lowest average (%u/%u): %s, average %.2f (score %.2f)' % (
+				self.dprint('%u/%u: New lowest average: %s, average %.2f (score %.2f)' % (
 					guess_idx + 1, len(guesses),
 					guess.upper(), mean_words_remaining, score
 				))
 
 			if is_lowest_max and not is_lowest_score:
-				self.dprint('New lowest max (%u/%u): %s, max %i (score %.2f)' % (
+				self.dprint('%u/%u: New lowest max: %s, max %i (score %.2f)' % (
 					guess_idx + 1, len(guesses),
 					guess.upper(), max_words_remaining, score
 				))
