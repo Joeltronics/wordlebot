@@ -31,22 +31,29 @@ DEFAULT_NUM_BENCHMARK = 50
 def parse_args():
 	parser = argparse.ArgumentParser()
 
-	parser.add_argument('-s', dest='solution', type=str, default=None, help='Specify a solution')
-	parser.add_argument(
+	group = parser.add_argument_group('Game')
+	group.add_argument('-s', dest='solution', type=str, default=None, help='Specify a solution')
+	group.add_argument('-g', metavar='GUESS', dest='guesses', type=str, nargs='+', help='Specify first guesses')
+	group.add_argument('--all-words', action='store_true', help='Allow all valid words as solutions, not limited set')
+	group.add_argument('--endless', action='store_true', help="Don't end after six guesses if still unsolved")
+	group.add_argument('--solve', action='store_true', help="Automatically use solver's guess")
+
+	group = parser.add_argument_group('Solver')
+	group.add_argument(
 		'-l', dest='limit', type=float, default=4,
 		help='Limit solver search space complexity (i.e. higher will do a better job of solving, but run much slower). Specified as a power of 10. Default 4.')
-	parser.add_argument(
+	group.add_argument('--agnostic', action='store_true', help='Make solver unaware of limited set of possible solutions')
+
+	group = parser.add_argument_group('Benchmarking & A/B testing')
+	group.add_argument(
 		'-b', metavar='RUNS', dest='benchmark', type=int, default=None,
 		help='Benchmark performance')
+	group.add_argument('--benchmark', dest='benchmark', action='store_const', const=DEFAULT_NUM_BENCHMARK, help='Equivalent to -b %i' % DEFAULT_NUM_BENCHMARK)
+	group.add_argument('--ab', dest='a_b_test', action='store_true', help='Benchmark A/B test (currently hard-coded to compare --agnostic against not)')
 
-	parser.add_argument('--benchmark', dest='benchmark', action='store_const', const=DEFAULT_NUM_BENCHMARK, help='Equivalent to -b %i' % DEFAULT_NUM_BENCHMARK)
-	parser.add_argument('--ab', dest='a_b_test', action='store_true', help='Benchmark A/B test (currently hard-coded to compare --agnostic against not)')
-	parser.add_argument('--all-words', action='store_true', help='Allow all valid words as solutions, not just limited set')
-	parser.add_argument('--agnostic', action='store_true', help='Make solver unaware of limited set of possible solutions')
-	parser.add_argument('--solve', action='store_true', help="Automatically use solver's guess")
-	parser.add_argument('--debug', action='store_true', help='Enable debug printing')
-	parser.add_argument('--cheat', action='store_true', help='Show the solution')
-	parser.add_argument('--endless', action='store_true', help="Don't end after six guesses if still unsolved")
+	group = parser.add_argument_group('Debugging')
+	group.add_argument('--cheat', action='store_true', help='Show the solution before starting the game')
+	group.add_argument('--debug', action='store_true', help='Enable debug printing')
 
 	args = parser.parse_args()
 
@@ -176,7 +183,7 @@ def pick_solution(args, deterministic_idx: Optional[int] = None, do_print=True):
 	return solution
 
 
-def play_game(solution, solver: Solver, auto_solve: bool, endless=False, silent=False) -> int:
+def play_game(solution, solver: Solver, auto_solve: bool, endless=False, silent=False, specified_guesses=None) -> int:
 	"""
 	:returns: Number of guesses game was solved in
 	"""
@@ -184,6 +191,16 @@ def play_game(solution, solver: Solver, auto_solve: bool, endless=False, silent=
 	def game_print(*args, **kwargs):
 		if not silent:
 			print(*args, **kwargs)
+
+	if specified_guesses is None:
+		specified_guesses = []
+	else:
+		def _check_guess(guess: str) -> str:
+			if len(guess) != 5:
+				raise ValueError('Specified guess "%s" does not have length 5!' % guess.upper())
+			# TODO: warn if guess isn't in list of allowed guesses
+			return guess.lower()
+		specified_guesses = [_check_guess(guess) for guess in specified_guesses]
 
 	letter_status = LetterStatus()
 	guesses = []
@@ -196,9 +213,11 @@ def play_game(solution, solver: Solver, auto_solve: bool, endless=False, silent=
 			letter_status.print_keyboard()
 		game_print()
 
+		specified_guess = specified_guesses[guess_num - 1] if (guess_num - 1) < len(specified_guesses) else None
+
 		solver_guess = None
 
-		if solver is not None:
+		if (solver is not None) and (not specified_guess):
 
 			num_possible_solutions = solver.get_num_possible_solutions()
 
@@ -233,7 +252,10 @@ def play_game(solution, solver: Solver, auto_solve: bool, endless=False, silent=
 			game_print()
 			solver_guess = solver.get_best_guess()
 
-		if auto_solve and (solver_guess is not None):
+		if specified_guess:
+			game_print('Using specified guess: %s' % specified_guess.upper())
+			guess = specified_guess
+		elif auto_solve and (solver_guess is not None):
 			game_print('Using guess from solver: %s' % solver_guess.upper())
 			guess = solver_guess
 		else:
@@ -368,7 +390,7 @@ def benchmark(args, a_b_test: bool, num_benchmark=50):
 			start_time = time.time()
 
 			solver = Solver(**this_solver_args)
-			num_guesses = play_game(solution=solution, solver=solver, auto_solve=True, endless=True, silent=True)
+			num_guesses = play_game(solution=solution, solver=solver, auto_solve=True, endless=True, silent=True, specified_guesses=args.guesses)
 
 			end_time = time.time()
 			duration = end_time - start_time
@@ -432,7 +454,7 @@ def main():
 		verbosity=(SolverVerbosity.debug if args.debug else SolverVerbosity.regular),
 	)
 
-	play_game(solution=solution, solver=solver, auto_solve=args.solve, endless=args.endless)
+	play_game(solution=solution, solver=solver, auto_solve=args.solve, endless=args.endless, specified_guesses=args.guesses)
 
 
 if __name__ == "__main__":
