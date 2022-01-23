@@ -21,27 +21,27 @@ class SolverParams:
 
 	# "Best solution" score weights
 
-	score_weight_mean = 1
-	score_weight_mean_squared = 0
-	score_weight_max = 10
-	score_penalty_non_solution = 5
+	score_weight_mean: int = 1
+	score_weight_mean_squared: int = 0
+	score_weight_max: int = 10
+	score_penalty_non_solution: int = 5
 
 	# Pruning
 
 	# Ratio of possible guesses to target - if under, then prune solutions too
-	prune_target_guess_ratio = 0.1
+	prune_target_guess_ratio: float = 0.1
 
 	# Pruning possible solutions to check against
 	# Base divisor is number of solutions remaining divided by this
-	prune_divide_possible_num_solutions_divisor = 4
+	prune_divide_possible_num_solutions_divisor: int = 4
 	# Always take at least 1/4 of possible
-	prune_divide_possible_max = 4
+	prune_divide_possible_max: int = 4
 
 	# Pruning possible solutions to check how many remain
 	# Base divisor is number of solutions remaining divided by this
-	prune_divide_num_remaining_num_solutions_divisor = 8
+	prune_divide_num_remaining_num_solutions_divisor: int = 8
 	# Always take at least 1/4 of possible
-	prune_divide_num_remaining_max = 4
+	prune_divide_num_remaining_max: int = 4
 
 
 def clip(value, range):
