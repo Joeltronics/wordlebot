@@ -365,6 +365,11 @@ def benchmark(args, a_b_test: bool, num_benchmark=50):
 			ABTestInstance()
 		]
 
+	# TODO: generalize this for more than 2 cases
+	a_won = b_won = tied = None
+	if len(a_b_tests) == 2:
+		a_won = b_won = tied = 0
+
 	print()
 	print('Benchmarking %i runs...' % num_benchmark)
 	print()
@@ -402,6 +407,17 @@ def benchmark(args, a_b_test: bool, num_benchmark=50):
 			a_b_test.add_result(num_guesses=num_guesses, duration=duration)
 			results_per_solver.append((num_guesses, duration))
 
+		if len(a_b_tests) == 2:
+			assert len(results_per_solver) == 2
+			a_guesses = results_per_solver[0][0]
+			b_guesses = results_per_solver[1][0]
+			if a_guesses < b_guesses:
+				a_won += 1
+			elif a_guesses > b_guesses:
+				b_won += 1
+			else:
+				tied += 1
+
 		print_str = '%8s' % solution.upper()
 
 		for num_guesses, duration in results_per_solver:
@@ -413,10 +429,16 @@ def benchmark(args, a_b_test: bool, num_benchmark=50):
 		print(print_str)
 
 	# TODO: print which solution had the worst benchmarks
-	# TODO: for A/B testing, print scores of one vs the other
 
 	print()
 	print('Benchmarked %s runs:' % num_benchmark)
+
+	if len(a_b_tests) == 2:
+		print()
+		print('Head to head results:')
+		print('  %s wins: %i/%i (%.1f%%)' % (a_b_tests[0].name, a_won, num_benchmark, a_won / num_benchmark * 100.0))
+		print('  %s wins: %i/%i (%.1f%%)' % (a_b_tests[1].name, b_won, num_benchmark, b_won / num_benchmark * 100.0))
+		print('  Ties: %i/%i (%.1f%%)' % (tied, num_benchmark, tied / num_benchmark * 100.0))
 
 	for a_b_test in a_b_tests:
 		if len(a_b_tests) > 1:
