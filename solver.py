@@ -384,13 +384,16 @@ class Solver:
 				(self.params.score_weight_mean_squared * mean_squared_words_remaining) + \
 				(0 if is_possible_solution else self.params.score_penalty_non_solution)
 
-			if (not limited_solutions_to_check_possible) and (max_words_remaining == 1) and is_possible_solution:
-				# Can't possibly do any better than this, so don't bother processing any further
-				self.dprint('%u/%u: Found optimal guess %s; not searching any further' % (
-					guess_idx + 1, len(guesses), guess.upper()))
-				best_guess = guess
-				lowest_score = score
-				break
+			if (not limited_solutions_to_check_possible) and (max_words_remaining == 1):
+				if is_possible_solution:
+					# Can't possibly do any better than this, so don't bother processing any further
+					self.dprint('%u/%u: Found optimal guess %s; not searching any further' % (
+						guess_idx + 1, len(guesses), guess.upper()))
+					best_guess = guess
+					lowest_score = score
+					break
+				else:
+					pass  # TODO: after this, we only need to check possible solutions
 
 			is_lowest_average = lowest_average is None or mean_words_remaining < lowest_average
 			is_lowest_max = lowest_max is None or max_words_remaining < lowest_max

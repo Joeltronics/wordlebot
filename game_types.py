@@ -13,37 +13,75 @@ class CharStatus(Enum):
 	correct = 3
 
 
-def get_character_statuses(guess: str, solution: str) -> List[CharStatus]:
+def get_character_statuses(guess: str, solution: str) -> tuple[CharStatus, CharStatus, CharStatus, CharStatus, CharStatus]:
 
-	assert len(guess) == len(solution)
+	assert len(guess) == 5
+	assert len(solution) == 5
 
 	guess = guess.lower()
 	solution = solution.lower()
 
-	statuses = [CharStatus.unknown for _ in range(5)]
+	statuses = [None for _ in range(5)]
 
-	# 1st pass: green or definite grey
+	unsolved_chars = list(solution)
+
+	# 1st pass: green or definite grey (yellow is more complicated, since there could be multiple of the same letter)
 	for n, character in enumerate(guess):
 
 		if character == solution[n]:
 			statuses[n] = CharStatus.correct
+			unsolved_chars[n] = ' '
 
 		elif character not in solution:
 			statuses[n] = CharStatus.not_in_solution
 
-	# 2nd pass: letters that are in word but in wrong place - could be yellow or grey depending on green guesses
+	# 2nd pass: letters that are in word but in wrong place (not necessarily yellow when multiple of same letter in word)
 	for n, character in enumerate(guess):
-		if statuses[n] == CharStatus.unknown:
+		if statuses[n] is None:
 			assert character in solution
+			if character in unsolved_chars:
+				statuses[n] = CharStatus.wrong_position
+				unsolved_char_idx = unsolved_chars.index(character)
+				unsolved_chars[unsolved_char_idx] = ' '
+			else:
+				statuses[n] = CharStatus.not_in_solution
 
-			num_this_char_correct = sum([(c == character and s == CharStatus.correct) for c, s in zip(guess, statuses)])
-			num_this_char_in_solution = sum([c == character for c in solution])
+	assert not any([status is None for status in statuses])
+	return tuple(statuses)
 
-			assert num_this_char_in_solution >= 1
-			assert num_this_char_in_solution >= num_this_char_correct
-			num_this_char_in_solution_not_spoken_for = num_this_char_in_solution - num_this_char_correct
 
-			statuses[n] = CharStatus.wrong_position if num_this_char_in_solution_not_spoken_for > 0 else CharStatus.not_in_solution
+# Inline unit tests
 
-	assert not any([status == CharStatus.unknown for status in statuses])
-	return statuses
+# Basic
+assert get_character_statuses(solution='abcde', guess='fghij') == (
+	CharStatus.not_in_solution,
+	CharStatus.not_in_solution,
+	CharStatus.not_in_solution,
+	CharStatus.not_in_solution,
+	CharStatus.not_in_solution)
+assert get_character_statuses(solution='abcde', guess='acxyz') == (
+	CharStatus.correct,
+	CharStatus.wrong_position,
+	CharStatus.not_in_solution,
+	CharStatus.not_in_solution,
+	CharStatus.not_in_solution)
+
+# "multiple of same letter" logic
+assert get_character_statuses(solution='mount', guess='books') == (
+	CharStatus.not_in_solution,
+	CharStatus.correct,
+	CharStatus.not_in_solution,
+	CharStatus.not_in_solution,
+	CharStatus.not_in_solution)
+assert get_character_statuses(solution='mount', guess='brook') == (
+	CharStatus.not_in_solution,
+	CharStatus.not_in_solution,
+	CharStatus.wrong_position,
+	CharStatus.not_in_solution,
+	CharStatus.not_in_solution)
+assert get_character_statuses(solution='books', guess='brook') == (
+	CharStatus.correct,
+	CharStatus.not_in_solution,
+	CharStatus.correct,
+	CharStatus.wrong_position,
+	CharStatus.wrong_position)

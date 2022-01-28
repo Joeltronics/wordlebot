@@ -28,6 +28,7 @@ But it would be worth exploring this when there are few remaining.
 
 The guess pruning algorithm itself could stand to be improved - right now it just looks for most common unsolved letters
 in words, but doesn't account for letter position, yellow letters, or multiple of the same letter in the word.
+The first guess is chosen using this same algorithm, so it would also benefit from any improvements here.
 
 The pruning of solutions to check against is also very basic - the goal is to remove solutions that are most similar to
 existing solutions, which is currently achieved by just sorting the list and taking every N results.
@@ -39,7 +40,7 @@ This is just a quick project from a few evenings of work, so the code quality is
 There are various optimization parameters in the SolverParams dataclass, which can be tweaked to make different tradeoffs.
 So far, these have been chosen based on what seems make sense, not on actual results.
 There's a benchmarking/A-B testing mode that could be used to fine tune these parameters for best results, but so far I haven't done this.
-It's still a bit early to optimize these parameters - it doesn't really make sense to fine tune them now if there are more algorithm changes still to come. 
+It's still a bit early to optimize these parameters - it doesn't really make sense to fine tune them now if there are more algorithm changes still to come.
 
 ## FAQ
 
