@@ -28,7 +28,8 @@ class SolverParams:
 	# Recursion: solve for fewest number of guesses needed, instead of heuristics
 
 	recursion_max_solutions: int = 0
-	#recursion_min_num_guesses: int = 20
+	# Non-solution guesses may be added to pad guess list, up to this many total guesses
+	recursion_pad_num_guesses: int = 20
 
 	# "Best solution" score weights
 
@@ -476,10 +477,10 @@ class Solver:
 		solutions_sorted = sorted(list(self.possible_solutions))
 		num_possible_solutions = len(solutions_sorted)
 
-		self.print(f'Checking {num_possible_solutions} solutions, recursively...')
+		self.print(f'Checking against {num_possible_solutions} solutions, recursively...')
 		best_guess, best_score = self._solve_recursive_inner(possible_solutions=solutions_sorted, recursive_depth=0)
 		self.dprint()
-		self.print(f'Best guess {best_guess.upper()}, worst case solve in {best_score} more guesses')
+		self.print(f'Best guess {best_guess.upper()} (worst case: solve in {best_score} more guesses after this one)')
 		return best_guess
 
 
@@ -490,10 +491,7 @@ class Solver:
 			recursion_depth_limit: int = RECURSION_HARD_LIMIT,
 	) -> Tuple[str, float]:
 
-		# TODO: use recursion_depth_limit later, before calling recursive
-		# At that point, can change this check to an assert
-		if recursive_depth >= RECURSION_HARD_LIMIT:
-			raise RecursionError('Recursive depth reached limit %i' % recursive_depth)
+		assert recursive_depth < RECURSION_HARD_LIMIT
 
 		# TODO: Add another depth limit, which switches to heuristics instead of giving up
 
@@ -503,23 +501,30 @@ class Solver:
 		else:
 			log = lambda msg: self.print_level(SolverVerbosity.debug, indentation + msg)
 
-		# TODO: add in some non-solution guesses
-		"""
-		num_guesses_to_try = max(self.params.recursion_min_num_guesses, num_possible_solutions)
-		num_non_solutions_to_try = num_guesses_to_try -  num_possible_solutions
+		total_num_possible_solutions = len(possible_solutions)
 
-		# Do the pruning
+		# Determine guesses to try
+		# Try all solutions, add in some non-solutions
+		# TODO: When lots remaining, should prioritize non-solution guesses (even removing some solution guesses)
+
+		num_guesses_to_try = max(self.params.recursion_pad_num_guesses, total_num_possible_solutions)
+
+		# Never try more non-solutions than solutions
+		# i.e. if recursion_pad_num_guesses == 20, but if there are only 3 solutions left,
+		# then it's not worth checking 17 non-solutions, so just check 3 solutions + the top 3 non-solutions
+		num_non_solutions_to_try = min(num_guesses_to_try - total_num_possible_solutions, num_guesses_to_try)
 
 		non_solution_guesses_to_try = list(self.allowed_words - self.possible_solutions)
 		solution_guesses_to_try = list(self.possible_solutions)
 
-		solution_guesses_to_try_scored = self._score_guesses(solution_guesses_to_try, sort=True)
-		non_solution_guesses_to_try_scored = self._score_guesses(non_solution_guesses_to_try, sort=True)[:num_non_solutions_to_try]
+		solution_guesses_to_try_scored = self._prune_and_sort_guesses(
+			solution_guesses_to_try, max_num=None)
+		non_solution_guesses_to_try_scored = self._prune_and_sort_guesses(
+			non_solution_guesses_to_try, max_num=num_non_solutions_to_try)
 
-		num_possible_guesses = len(self.allowed_words)
-		"""
+		guesses_to_try = solution_guesses_to_try_scored + non_solution_guesses_to_try_scored
 
-		guesses_to_try = sorted(list(possible_solutions))
+		# Now search for best guess
 
 		best_guess = None
 		best_guess_score = None
@@ -538,8 +543,6 @@ class Solver:
 				log('Guess %i, option %i/%i %s: checking against %i solutions' % (
 					recursive_depth + 1, guess_idx + 1, len(guesses_to_try), guess.upper(), len(possible_solutions)
 				))
-
-			total_num_possible_solutions = len(possible_solutions)
 
 			remaining_possible_solutions = copy(possible_solutions)
 
@@ -564,43 +567,63 @@ class Solver:
 				assert len(remaining_possible_solutions) < len_at_start_of_loop
 
 				if len(possible_solutions_this_guess) == 1:
-					log('  Solution possibility %i/%i %s, would have down to %i' % (
+					log('  Solution possibility %i/%i %s, would have down to 1, guaranteed 1 more guess' % (
 						total_num_possible_solutions - len_at_start_of_loop + 1,
 						total_num_possible_solutions,
 						possible_solutions_this_guess[0].upper(),
-						len(possible_solutions_this_guess),
 					))
+					this_solution_score = 1
+
+				elif len(possible_solutions_this_guess) == 2:
+					log('  Solution possibilities %i-%i/%i %s/%s, would have down to 2, worst case 2 more guesses' % (
+						total_num_possible_solutions - len_at_start_of_loop + 1,
+						total_num_possible_solutions - len_at_start_of_loop + len(possible_solutions_this_guess),
+						total_num_possible_solutions,
+						possible_solutions_this_guess[0].upper(),
+						possible_solutions_this_guess[1].upper(),
+					))
+					this_solution_score = 2
+
 				else:
 					log('  Solution possibilities %i-%i/%i, would have down to %i' % (
 						total_num_possible_solutions - len_at_start_of_loop + 1,
 						total_num_possible_solutions - len_at_start_of_loop + len(possible_solutions_this_guess),
 						total_num_possible_solutions,
-						len(possible_solutions_this_guess)
+						len(possible_solutions_this_guess),
 					))
 
-				if len(possible_solutions_this_guess) == 1:
-					this_solution_score = 1
+					# Search recursively, but limit depth - no point searching any deeper than current minimax
 
-				elif len(possible_solutions_this_guess) == 2:
-					this_solution_score = 2
+					if best_guess_score is not None:
+						this_recursion_depth_limit = best_guess_score - 1
+					else:
+						this_recursion_depth_limit = recursion_depth_limit
 
-				else:
-					# TODO: set recursion_depth_limit based on current best guess score - no point searching deeper
-					try:
-						this_level_best_guess, this_level_best_score = self._solve_recursive_inner(
-							possible_solutions=possible_solutions_this_guess,
-							recursive_depth=recursive_depth + 1
-						)
+					next_recursive_depth = recursive_depth + 1
 
-						if this_level_best_score is None:
-							continue
-
-						this_solution_score = this_level_best_score + 1
-
-					except RecursionError:
-						log('  Hit recursion depth limit; not using this guess')
+					if next_recursive_depth >= RECURSION_HARD_LIMIT:
+						log('  Hit recursion depth hard limit, abandoning this guess')
 						skip_this_guess = True
 						break
+
+					elif next_recursive_depth > this_recursion_depth_limit:
+						log('  Searching deeper would be worse then current best case, abandoning this guess')
+						skip_this_guess = True
+						break
+
+					else:
+						this_level_best_guess, this_level_best_score = self._solve_recursive_inner(
+							possible_solutions=possible_solutions_this_guess,
+							recursive_depth=next_recursive_depth,
+							recursion_depth_limit=this_recursion_depth_limit,
+						)
+
+						if this_level_best_guess is None:
+							log('  Deeper level hit recursion depth limit, abandoning this guess')
+							skip_this_guess = True
+							break
+
+						this_solution_score = this_level_best_score + 1
 
 				if (worst_solution_score is None) or (this_solution_score > worst_solution_score):
 					worst_solution_score = this_solution_score
@@ -615,9 +638,16 @@ class Solver:
 				best_guess = guess
 				best_guess_score = worst_solution_score
 
-			log('Guess %i, option %i/%i %s: Worst case, solve in %i more guess(es)' % (
-				recursive_depth + 1, guess_idx + 1, len(guesses_to_try), guess.upper(), best_guess_score
-			))
+			assert best_guess_score >= 1
+
+			if best_guess_score == 1:
+				log('Guess %i, option %i/%i %s: Guaranteed to solve in 1 more guess' % (
+					recursive_depth + 1, guess_idx + 1, len(guesses_to_try), guess.upper(),
+				))
+			else:
+				log('Guess %i, option %i/%i %s: Worst case, solve in %i more guesses' % (
+					recursive_depth + 1, guess_idx + 1, len(guesses_to_try), guess.upper(), best_guess_score,
+				))
 
 			BEST_POSSIBLE = 1
 			assert worst_solution_score >= BEST_POSSIBLE

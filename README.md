@@ -20,23 +20,17 @@ The main pruning is the list of possible guesses, based on which use the most co
 When the search space is very large, we also prune the list of possible solutions to check these guesses against.
 
 When there are fewer guesses than a certain limit, search recursively for which guess will take the fewest remaining guesses to solve (using minimax).
-However, currently the recursive algorithm only tests guesses that are possible solutions (equivalent to "hard mode").
-Despite this, recursive still beats heuristic more often than not.
 
 ## How could it be improved?
 
 #### Recursive algorithm improvements
 
-Right now, the recursive algorithm only tries guesses that are possible solutions, i.e. it plays in "hard mode".
-This is the biggest area of improvement.
-
 The recursive algorithm only uses minimax at the moment.
 This is because it's very easy to limit the recursion depth - there's no point ever searching deeper than your current best.
-(At least in theory - this isn't actually implemented yet! There's another improvement.)
 However, it would be worth exploring better metrics such as mean or least-squares (there are still ways of limiting depth with these, they're just not as simple). 
 Minimax should be better at optimizing for win percentage, but not for trying to solve in the fewest guesses.
 
-Also, choosing recursive vs non-recursive doesn't need to be an all-or-nothing decision.
+Similarly, recursive & heuristic don't need to be mutually exclusive, as they are right now.
 For example, we could search 1 or 2 levels recursively, and then use heuristics on the next level after that.
 I suspect this would work quite well, and I would like to explore this in the future.
 
