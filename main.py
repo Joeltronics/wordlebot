@@ -328,6 +328,19 @@ class RollingStats:
 			return 0
 		return median(self.values)
 
+	def histogram(self):
+		# TODO: use a counter for this
+		hist = [0 for _ in range(7)]
+		hist[0] = sum([val == 1 for val in self.values])
+		hist[1] = sum([val == 2 for val in self.values])
+		hist[2] = sum([val == 3 for val in self.values])
+		hist[3] = sum([val == 4 for val in self.values])
+		hist[4] = sum([val == 5 for val in self.values])
+		hist[5] = sum([val == 6 for val in self.values])
+		hist[6] = sum([val >= 7 for val in self.values])
+		return hist
+
+
 class ABTestInstance:
 	def __init__(self, name: Optional[str] = None, solver_args: Optional[dict] = None):
 		self.name = name
@@ -393,7 +406,8 @@ def benchmark(args, a_b_test: bool, num_benchmark=50):
 		print('        ' + ''.join(['   %-15s' % test.name for test in a_b_tests]))
 		print('Solution' + ('   Guesses    Time' * len(a_b_tests)))
 	else:
-		print('Solution   Guesses    Time')
+		print('Solution   Guesses    Time'
+)
 	print()
 
 	for solution_idx in range(num_benchmark):
@@ -444,10 +458,59 @@ def benchmark(args, a_b_test: bool, num_benchmark=50):
 
 		print(print_str)
 
-	# TODO: print which solution had the worst benchmarks
-
 	print()
 	print('Benchmarked %s runs:' % num_benchmark)
+
+	# TODO: print which solution had the worst benchmarks
+
+	# Histograms
+
+	hists = [
+		a_b_test.num_guesses_stats.histogram()
+		for a_b_test in a_b_tests
+	]
+
+	hist_max = max([max(hist) for hist in hists])
+	hist_max_str_len = len(str(hist_max))
+
+	print()
+	print('        ' + ''.join(['   %-15s' % test.name for test in a_b_tests]))
+	print()
+
+	for n in range(len(hists[0])):
+
+		print_str = '   '
+		is_seven_plus = (n + 1) >= 7
+
+		if is_seven_plus:
+			print_str += '%s%i+%s' % (get_format_for_num_guesses(n + 1), n + 1, Style.RESET_ALL)
+		else:
+			print_str += '%s%i%s ' % (get_format_for_num_guesses(n + 1), n + 1, Style.RESET_ALL)
+
+		print_str += ' ' * 3
+
+		for hist in hists:
+			val = hist[n]
+
+			total_bar_width = 15 - hist_max_str_len
+
+			width = val * total_bar_width / hist_max
+			if 0.0 < width < 1.0:
+				# Always round up when less than 1
+				width = 1
+			else:
+				width = int(round(width))
+
+			print_str += '   '
+			print_str += ('%%%ii' % hist_max_str_len) % val
+			print_str += Back.RED if is_seven_plus else Back.GREEN
+			print_str += ' ' * width
+			print_str += Style.RESET_ALL
+			print_str += ' ' * (total_bar_width - width)
+
+		print(print_str)
+
+	# Other aggregate results
 
 	if len(a_b_tests) == 2:
 		print()
@@ -457,9 +520,14 @@ def benchmark(args, a_b_test: bool, num_benchmark=50):
 		print('  Ties: %i/%i (%.1f%%)' % (tied, num_benchmark, tied / num_benchmark * 100.0))
 
 	for a_b_test in a_b_tests:
+
 		if len(a_b_tests) > 1:
 			print()
-			print('%s:' % a_b_test.name)
+			print('%s stats:' % a_b_test.name)
+		else:
+			print()
+			print('Stats:')
+
 		print('  Solved %u/%u (%.1f%%)' % (a_b_test.num_solved, num_benchmark, a_b_test.num_solved / num_benchmark * 100.0))
 		print('  Guesses: best %i, median %g, mean %.2f, RMS %.2f, worst %i' % (
 			a_b_test.num_guesses_stats.min,
