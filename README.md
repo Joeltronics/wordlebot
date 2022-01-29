@@ -11,7 +11,7 @@ Though if you've already played a game of Wordle and want to see what the solver
 
 For the first guess, choose whichever word uses the most common letters in the list of possible solutions.
 
-For all subsequent guesses, use whichever guess will best narrow down the remaining possible solutions.
+For next guesses while there are still lots of solutions left, use the heuristic of which guess will best narrow down the remaining possible solutions.
 "Best" is difficult to quanitify here - there are a few different ways this could be chosen, such as worst-case (minimax), lowest average, or lowest mean-squared.
 Currently it uses a weighted score of minimax & average, weighted heavily toward minimax.
 
@@ -19,12 +19,35 @@ This has an O(n^3) complexity, so when there are still many possible solutions r
 The main pruning is the list of possible guesses, based on which use the most common remaining letters.
 When the search space is very large, we also prune the list of possible solutions to check these guesses against.
 
+When there are fewer guesses than a certain limit, search recursively for which guess will take the fewest remaining guesses to solve (using minimax).
+However, currently the recursive algorithm only tests guesses that are possible solutions (equivalent to "hard mode").
+Despite this, recursive still beats heuristic more often than not.
+
 ## How could it be improved?
 
-Solving for which guess will best narrow down the remaining possible solutions is a pretty good heuristic, but it's still not perfect.
-The actual variable we want to optimize is which guess will solve the puzzle with the fewest remaining guesses after.
-However, the current algorithm is already slow enough; making the algorithm look ahead to future guesses would significantly increase the complexity.
-But it would be worth exploring this when there are few remaining.
+#### Recursive algorithm improvements
+
+Right now, the recursive algorithm only tries guesses that are possible solutions, i.e. it plays in "hard mode".
+This is the biggest area of improvement.
+
+The recursive algorithm only uses minimax at the moment.
+This is because it's very easy to limit the recursion depth - there's no point ever searching deeper than your current best.
+(At least in theory - this isn't actually implemented yet! There's another improvement.)
+However, it would be worth exploring better metrics such as mean or least-squares (there are still ways of limiting depth with these, they're just not as simple). 
+Minimax should be better at optimizing for win percentage, but not for trying to solve in the fewest guesses.
+
+Also, choosing recursive vs non-recursive doesn't need to be an all-or-nothing decision.
+For example, we could search 1 or 2 levels recursively, and then use heuristics on the next level after that.
+I suspect this would work quite well, and I would like to explore this in the future.
+
+#### Non-recursive algorithm improvements
+
+We exit the loop early after finding a "perfect" guess - no point in keeping searching if it can't be beaten.
+However, in order to be perfect, it has to be a possible solution.
+If we find a non-solution but otherwise perfect guess, the only guess that could beat it is a perfect solution.
+That means, after finding such a guess, we could reduce the search space to only possible solutions.
+
+#### Pruning improvements
 
 The guess pruning algorithm itself could stand to be improved - right now it just looks for most common unsolved letters
 in words, but doesn't account for letter position, yellow letters, or multiple of the same letter in the word.
@@ -33,6 +56,8 @@ The first guess is chosen using this same algorithm, so it would also benefit fr
 The pruning of solutions to check against is also very basic - the goal is to remove solutions that are most similar to
 existing solutions, which is currently achieved by just sorting the list and taking every N results.
 This is an _okay_ way of accomplishing this goal, but it could definitely be improved.
+
+#### Other misc improvements
 
 The code isn't really optimized, and there could be some potential performance gains there.
 This is just a quick project from a few evenings of work, so the code quality is definitely not perfect either.
@@ -44,13 +69,13 @@ It's still a bit early to optimize these parameters - it doesn't really make sen
 
 ## FAQ
 
-### Doesn't this take the fun out of Wordle?
+#### Doesn't this take the fun out of Wordle?
 
 I still enjoy playing Wordle the old-fashioned way!
 My goal here is to have fun writing a solver, not to write something that will replace playing Wordle. 
 The solver's advantages are that it has a perfect vocabulary, and can try millions of combos of remaining words, neither of which I could do.
 
-### Is it "cheating" to have the solver know the full Wordle solution list?
+#### Is it "cheating" to have the solver know the full Wordle solution list?
 
 I mean, any solver is already "cheating" :wink:
 
@@ -69,7 +94,7 @@ Running `--benchmark` under the current default behavior (`-l 6`, which limits t
 * Without `--agnostic`, solves 100% (out of 50 puzzles), with an average of 3.46 guesses, worst case 5, average time 10.8 seconds per puzzle on my laptop
 * With `--agnostic`, still solves 100%, but the average goes up to 4.20 guesses, the worst case 6, and the average time 12.9 seconds (mostly due to needing more average guesses)
 
-### Why do green letters appear yellow, and yellow letters appear grey?
+#### Why do green letters appear yellow, and yellow letters appear grey?
 
 This seems to be a problem with the default Windows Powershell colors.
 If using Windows, using cmd or WSL should give you the correct colors.

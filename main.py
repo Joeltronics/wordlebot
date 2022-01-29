@@ -14,7 +14,7 @@ from typing import Iterable, Optional
 import random
 
 from game_types import *
-from solver import Solver, SolverVerbosity
+from solver import Solver, SolverVerbosity, SolverParams
 import word_list
 import user_input
 
@@ -42,6 +42,9 @@ def parse_args():
 	group.add_argument(
 		'-l', dest='limit', type=float, default=4,
 		help='Limit solver search space complexity (i.e. higher will do a better job of solving, but run much slower). Specified as a power of 10. Default 4.')
+	group.add_argument(
+		'-r', metavar='SOLUTIONS', dest='recursion', type=int, default=20,
+		help='Use recursive lookahead when this many or fewer solutions remain')
 	group.add_argument('--agnostic', action='store_true', help='Make solver unaware of limited set of possible solutions')
 
 	group = parser.add_argument_group('Benchmarking & A/B testing')
@@ -49,11 +52,12 @@ def parse_args():
 		'-b', metavar='RUNS', dest='benchmark', type=int, default=None,
 		help='Benchmark performance')
 	group.add_argument('--benchmark', dest='benchmark', action='store_const', const=DEFAULT_NUM_BENCHMARK, help='Equivalent to -b %i' % DEFAULT_NUM_BENCHMARK)
-	group.add_argument('--ab', dest='a_b_test', action='store_true', help='Benchmark A/B test (currently hard-coded to compare --agnostic against not)')
+	group.add_argument('--ab', dest='a_b_test', action='store_true', help='Benchmark A/B test (currently hard-coded to compare recursive against non-recursive)')
 
 	group = parser.add_argument_group('Debugging')
 	group.add_argument('--cheat', action='store_true', help='Show the solution before starting the game')
 	group.add_argument('--debug', action='store_true', help='Enable debug printing')
+	group.add_argument('--vdebug', dest='verbose_debug', action='store_true', help='Enable even more debug printing')
 
 	args = parser.parse_args()
 
@@ -176,7 +180,10 @@ def pick_solution(args, deterministic_idx: Optional[int] = None, do_print=True):
 		else:
 			solution = random.choice(words)
 
-		if args.cheat:
+		if args.solve:
+			print()
+			print('Using auto solve, so showing solution: %s' % solution.upper())
+		elif args.cheat:
 			print()
 			print('CHEAT MODE: solution is %s' % solution.upper())
 
@@ -243,7 +250,7 @@ def play_game(solution, solver: Solver, auto_solve: bool, endless=False, silent=
 				# 1
 				game_print('Only 1 possible solution: %s' % tuple(solver.get_possible_solitions())[0].upper())
 
-			if num_possible_solutions > 1:
+			if num_possible_solutions > 2:
 				most_common_unsolved_letters = solver.get_most_common_unsolved_letters()
 				game_print(
 					'Order of most common unsolved letters: ' +
@@ -337,6 +344,12 @@ class ABTestInstance:
 			self.num_solved += 1
 
 
+def make_solver_params(args, recursion_max_solutions=None) -> SolverParams:
+	return SolverParams(
+		recursion_max_solutions=(recursion_max_solutions if recursion_max_solutions is not None else args.recursion)
+	)
+
+
 def benchmark(args, a_b_test: bool, num_benchmark=50):
 
 	results = []
@@ -354,11 +367,14 @@ def benchmark(args, a_b_test: bool, num_benchmark=50):
 
 	if a_b_test:
 		a_b_tests = [
-			ABTestInstance(name='Agnostic', solver_args=dict(valid_solutions=word_list.words)),
-			ABTestInstance(name='Knowledgeable', solver_args=dict(valid_solutions=word_list.solutions)),
+			#ABTestInstance(name='Agnostic', solver_args=dict(valid_solutions=word_list.words, params=make_solver_params(args))),
+			#ABTestInstance(name='Knowledgeable', solver_args=dict(valid_solutions=word_list.solutions, params=make_solver_params(args))),
 
 			#ABTestInstance(name='Complexity 1,000', solver_args=dict(complexity_limit=1000)),
 			#ABTestInstance(name='Complexity 100,000', solver_args=dict(complexity_limit=100000)),
+
+			ABTestInstance(name='Non-recursive', solver_args=dict(valid_solutions=word_list.words, params=make_solver_params(args, recursion_max_solutions=0))),
+			ABTestInstance(name='Recursive', solver_args=dict(valid_solutions=word_list.solutions, params=make_solver_params(args, recursion_max_solutions=20))),
 		]
 	else:
 		a_b_tests = [
@@ -473,7 +489,11 @@ def main():
 		valid_solutions=(word_list.words if (args.all_words or args.agnostic) else word_list.solutions),
 		allowed_words=word_list.words,
 		complexity_limit=int(round(10.0 ** args.limit)),
-		verbosity=(SolverVerbosity.debug if args.debug else SolverVerbosity.regular),
+		verbosity=(
+			SolverVerbosity.verbose_debug if args.verbose_debug else
+			SolverVerbosity.debug if args.debug else
+			SolverVerbosity.regular),
+		params=make_solver_params(args),
 	)
 
 	play_game(solution=solution, solver=solver, auto_solve=args.solve, endless=args.endless, specified_guesses=args.guesses)

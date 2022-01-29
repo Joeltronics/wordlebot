@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 
 import collections
+from copy import copy
 from dataclasses import dataclass
 from enum import Enum, unique
 from math import sqrt
-from typing import Tuple, Iterable, Optional
+from typing import Tuple, Iterable, Optional, Union
 
 from game_types import *
+
+
+RECURSION_HARD_LIMIT = 7
+DEBUG_DONT_EXIT_ON_OPTIMAL_GUESS = False
 
 
 @unique
@@ -14,10 +19,16 @@ class SolverVerbosity(Enum):
 	silent = 0
 	regular = 1
 	debug = 2
+	verbose_debug = 3
 
 
 @dataclass(frozen=True)
 class SolverParams:
+
+	# Recursion: solve for fewest number of guesses needed, instead of heuristics
+
+	recursion_max_solutions: int = 0
+	#recursion_min_num_guesses: int = 20
 
 	# "Best solution" score weights
 
@@ -72,13 +83,15 @@ class Solver:
 		self.guesses = []
 		self.solved_letters = [None] * 5
 
-	def print(self, *args, **kwargs):
-		if self.verbosity.value > SolverVerbosity.silent.value:
+	def print_level(self, level: SolverVerbosity, *args, **kwargs) -> None:
+		if self.verbosity.value >= level.value:
 			print(*args, **kwargs)
 
-	def dprint(self, *args, **kwargs):
-		if self.verbosity.value >= SolverVerbosity.debug.value:
-			print(*args, **kwargs)
+	def print(self, *args, **kwargs) -> None:
+		self.print_level(SolverVerbosity.regular, *args, **kwargs)
+
+	def dprint(self, *args, **kwargs) -> None:
+		self.print_level(SolverVerbosity.debug, *args, **kwargs)
 
 	def get_num_possible_solutions(self) -> int:
 		return len(self.possible_solutions)
@@ -125,40 +138,68 @@ class Solver:
 	def get_most_common_unsolved_letters(self):
 		return self.get_unsolved_letters_counter().most_common()
 
-	def _num_solutions_remaining(self, guess: str, possible_solution: str, solutions: Iterable[str]) -> int:
+	def _solutions_remaining(self, guess: str, possible_solution: str, solutions: Iterable[str]) -> List[str]:
 		"""
-		If we guess this word, and see this result, figure out how many possible words could be remaining
+		If we guess this word, and see this result, figure out which words remain
 		"""
 		# TODO: this is a bottleneck, see if it can be optimized
 		character_status = get_character_statuses(guess, possible_solution)
 		# TODO: we only need the list length; it may be faster just to instead use:
 		#new_possible_solutions = sum([self._is_valid_for_guess(word, (guess, character_status)) for word in solutions])
 		new_possible_solutions = [word for word in solutions if self._is_valid_for_guess(word, (guess, character_status))]
-		return len(new_possible_solutions)
+		return new_possible_solutions
 
-	def _prune_and_sort_guesses(self, guesses: Iterable[str], max_num: Optional[int]) -> List[str]:
+	def _num_solutions_remaining(self, guess: str, possible_solution: str, solutions: Iterable[str]) -> int:
+		"""
+		If we guess this word, and see this result, figure out how many possible words could be remaining
+		"""
+		return len(self._solutions_remaining(guess=guess, possible_solution=possible_solution, solutions=solutions))
 
-		# Prune based on occurrence of most common unsolved letters
+	def _score_guesses(self, guesses: Iterable[str], sort=True) -> List[Tuple[str, int]]:
+		"""
+		Score guesses based on occurrence of most common unsolved letters
+		"""
 
 		# TODO: this doesn't take letter position (nor yellow letters) into account
 
 		counter = self.get_unsolved_letters_counter()
-		
+
 		def _score(word):
 			return sum([counter[unique_letter] for unique_letter in set(word)])
 
-		# Start with sorted list
-		# Otherwise behavior will be nondeterministic in cases of tied letter score (i.e. 2 words that are anagrams)
+		# Pre-sort guesses so that this will be deterministic in case of tied score
 		guesses = sorted(list(guesses))
-		guesses.sort(key=_score, reverse=True)
+
+		guesses = [(guess, _score(guess)) for guess in guesses]
+
+		if sort:
+			guesses.sort(key=lambda guess_and_score: guess_and_score[1], reverse=True)
+
+		return guesses
+
+	def _prune_and_sort_guesses(
+			self,
+			guesses: Iterable[str],
+			max_num: Optional[int],
+			return_score = False,
+	) -> List[Union[str, Tuple[str, int]]]:
+		"""
+		Prune guesses based on occurrence of most common unsolved letters
+		"""
+
+		# TODO: option to prioritize (or even force) guesses that are solutions
+
+		guesses_scored = self._score_guesses(guesses)
 
 		# TODO: could it be an overall improvement to randomly mix in a few with less common letters too?
 		# i.e. instead of a hard cutoff at max_num, make it a gradual "taper off" where we start picking fewer and fewer words from later in the list
-
 		if max_num is not None:
-			guesses = guesses[:max_num]
+			guesses_scored = guesses_scored[:max_num]
 
-		return guesses
+		if return_score:
+			return guesses_scored
+		else:
+			return [g[0] for g in guesses_scored]
 
 	def _determine_prune_counts(self, max_num_matches: Optional[int]) -> Tuple[int, int, int]:
 		"""
@@ -242,7 +283,7 @@ class Solver:
 		):
 			self.print(
 				f'Checking {num_guesses_to_try:,}/{num_possible_guesses:,} guesses' +
-				f' ({num_guesses_to_try / len(self.allowed_words) * 100.0:.1f}%)' +
+				f' ({num_guesses_to_try / num_possible_guesses * 100.0:.1f}%)' +
 				f' against {num_solutions_to_check_possible:,}/{num_possible_solutions:,} possible' +
 				f' and {num_solutions_to_check_num_remaining:,}/{num_possible_solutions:,} remaining' +
 				f' ({num_matches_to_check:,}/{total_num_matches:,} =' +
@@ -260,7 +301,6 @@ class Solver:
 				f'Checking all {num_possible_guesses:,} words against all {num_possible_solutions:,} solutions' +
 				f' ({total_num_matches:,} total matches)...'
 			)
-
 
 	def _brute_force_guess_for_fewest_remaining_words(self, max_num_matches: Optional[int] = None) -> str:
 		"""
@@ -328,7 +368,6 @@ class Solver:
 
 		return ret
 
-
 	def _brute_force_guess_for_fewest_remaining_words_from_lists(
 			self,
 			guesses: Iterable[str],
@@ -347,7 +386,7 @@ class Solver:
 		solutions_to_check_possible_ratio = len(self.possible_solutions) / len(solutions_to_check_num_remaining)
 		assert solutions_to_check_possible_ratio >= 1.0
 
-		# Take every possible valid guess, and run it against every possible remaining valid word, figure
+		# Take every possible valid guess, and run it against every possible remaining valid word
 		lowest_average = None
 		lowest_max = None
 		best_guess = None
@@ -387,7 +426,7 @@ class Solver:
 			if (not limited_solutions_to_check_possible) and (max_words_remaining == 1):
 				if is_possible_solution:
 					# Can't possibly do any better than this, so don't bother processing any further
-					self.dprint('%u/%u: Found optimal guess %s; not searching any further' % (
+					self.dprint('%i/%i %s: Optimal guess; not searching any further' % (
 						guess_idx + 1, len(guesses), guess.upper()))
 					best_guess = guess
 					lowest_score = score
@@ -408,7 +447,7 @@ class Solver:
 			if is_lowest_score:
 				best_guess = guess
 				lowest_score = score
-				self.dprint('%u/%u: Best so far: %s, score %.2f (average %.2f, lowest %.2f / worst case %i, lowest %i)' % (
+				self.dprint('%i/%i %s: Best so far, score %.2f (average %.2f, lowest %.2f / worst case %i, lowest %i)' % (
 					guess_idx + 1, len(guesses),
 					guess.upper(),
 					score,
@@ -417,18 +456,186 @@ class Solver:
 				))
 
 			if is_lowest_average and not is_lowest_score:
-				self.dprint('%u/%u: New lowest average: %s, average %.2f (score %.2f)' % (
+				self.dprint('%i/%i %s: New lowest average, but not lowest score: %.2f (score %.2f, best %.2f)' % (
 					guess_idx + 1, len(guesses),
-					guess.upper(), mean_words_remaining, score
+					guess.upper(), mean_words_remaining, score, lowest_score
 				))
 
 			if is_lowest_max and not is_lowest_score:
-				self.dprint('%u/%u: New lowest max: %s, max %i (score %.2f)' % (
+				self.dprint('%i/%i %s: New lowest max, but not lowest score: %i (score %.2f, best %.2f)' % (
 					guess_idx + 1, len(guesses),
-					guess.upper(), max_words_remaining, score
+					guess.upper(), max_words_remaining, score, lowest_score
 				))
 
 		return best_guess, lowest_score
+
+	def _solve_recursive(self, max_num_matches: Optional[int] = None) -> str:
+
+		# TODO: use max_num_matches
+
+		solutions_sorted = sorted(list(self.possible_solutions))
+		num_possible_solutions = len(solutions_sorted)
+
+		self.print(f'Checking {num_possible_solutions} solutions, recursively...')
+		best_guess, best_score = self._solve_recursive_inner(possible_solutions=solutions_sorted, recursive_depth=0)
+		self.dprint()
+		self.print(f'Best guess {best_guess.upper()}, worst case solve in {best_score} more guesses')
+		return best_guess
+
+
+	def _solve_recursive_inner(
+			self,
+			possible_solutions: Iterable[str],
+			recursive_depth: int,
+			recursion_depth_limit: int = RECURSION_HARD_LIMIT,
+	) -> Tuple[str, float]:
+
+		# TODO: use recursion_depth_limit later, before calling recursive
+		# At that point, can change this check to an assert
+		if recursive_depth >= RECURSION_HARD_LIMIT:
+			raise RecursionError('Recursive depth reached limit %i' % recursive_depth)
+
+		# TODO: Add another depth limit, which switches to heuristics instead of giving up
+
+		indentation = '    ' * recursive_depth
+		if recursive_depth >= 1:
+			log = lambda msg: self.print_level(SolverVerbosity.verbose_debug, indentation + msg)
+		else:
+			log = lambda msg: self.print_level(SolverVerbosity.debug, indentation + msg)
+
+		# TODO: add in some non-solution guesses
+		"""
+		num_guesses_to_try = max(self.params.recursion_min_num_guesses, num_possible_solutions)
+		num_non_solutions_to_try = num_guesses_to_try -  num_possible_solutions
+
+		# Do the pruning
+
+		non_solution_guesses_to_try = list(self.allowed_words - self.possible_solutions)
+		solution_guesses_to_try = list(self.possible_solutions)
+
+		solution_guesses_to_try_scored = self._score_guesses(solution_guesses_to_try, sort=True)
+		non_solution_guesses_to_try_scored = self._score_guesses(non_solution_guesses_to_try, sort=True)[:num_non_solutions_to_try]
+
+		num_possible_guesses = len(self.allowed_words)
+		"""
+
+		guesses_to_try = sorted(list(possible_solutions))
+
+		best_guess = None
+		best_guess_score = None
+
+		for guess_idx, guess in enumerate(guesses_to_try):
+
+			if recursive_depth == 0:
+				log('')
+
+			if len(possible_solutions) <= 6:
+				log('Guess %i, option %i/%i %s: checking against %i solutions: %s' % (
+					recursive_depth + 1, guess_idx + 1, len(guesses_to_try), guess.upper(), len(possible_solutions),
+					' '.join([solution.upper() for solution in possible_solutions])
+				))
+			else:
+				log('Guess %i, option %i/%i %s: checking against %i solutions' % (
+					recursive_depth + 1, guess_idx + 1, len(guesses_to_try), guess.upper(), len(possible_solutions)
+				))
+
+			total_num_possible_solutions = len(possible_solutions)
+
+			remaining_possible_solutions = copy(possible_solutions)
+
+			skip_this_guess = False
+			worst_solution_score = None
+
+			while len(remaining_possible_solutions) > 0:
+
+				len_at_start_of_loop = len(remaining_possible_solutions)
+
+				possible_solutions_this_guess = self._solutions_remaining(
+					guess=guess,
+					possible_solution=remaining_possible_solutions[0],
+					solutions=possible_solutions,
+				)
+
+				assert len(possible_solutions_this_guess) > 0
+
+				for possible_solution in possible_solutions_this_guess:
+					remaining_possible_solutions.remove(possible_solution)
+
+				assert len(remaining_possible_solutions) < len_at_start_of_loop
+
+				if len(possible_solutions_this_guess) == 1:
+					log('  Solution possibility %i/%i %s, would have down to %i' % (
+						total_num_possible_solutions - len_at_start_of_loop + 1,
+						total_num_possible_solutions,
+						possible_solutions_this_guess[0].upper(),
+						len(possible_solutions_this_guess),
+					))
+				else:
+					log('  Solution possibilities %i-%i/%i, would have down to %i' % (
+						total_num_possible_solutions - len_at_start_of_loop + 1,
+						total_num_possible_solutions - len_at_start_of_loop + len(possible_solutions_this_guess),
+						total_num_possible_solutions,
+						len(possible_solutions_this_guess)
+					))
+
+				if len(possible_solutions_this_guess) == 1:
+					this_solution_score = 1
+
+				elif len(possible_solutions_this_guess) == 2:
+					this_solution_score = 2
+
+				else:
+					# TODO: set recursion_depth_limit based on current best guess score - no point searching deeper
+					try:
+						this_level_best_guess, this_level_best_score = self._solve_recursive_inner(
+							possible_solutions=possible_solutions_this_guess,
+							recursive_depth=recursive_depth + 1
+						)
+
+						if this_level_best_score is None:
+							continue
+
+						this_solution_score = this_level_best_score + 1
+
+					except RecursionError:
+						log('  Hit recursion depth limit; not using this guess')
+						skip_this_guess = True
+						break
+
+				if (worst_solution_score is None) or (this_solution_score > worst_solution_score):
+					worst_solution_score = this_solution_score
+
+			if skip_this_guess:
+				continue
+
+			if worst_solution_score is None:
+				raise RecursionError('All possible guesses hit recursion limit!')
+
+			if (best_guess_score is None) or (worst_solution_score < best_guess_score):
+				best_guess = guess
+				best_guess_score = worst_solution_score
+
+			log('Guess %i, option %i/%i %s: Worst case, solve in %i more guess(es)' % (
+				recursive_depth + 1, guess_idx + 1, len(guesses_to_try), guess.upper(), best_guess_score
+			))
+
+			BEST_POSSIBLE = 1
+			assert worst_solution_score >= BEST_POSSIBLE
+			if worst_solution_score == BEST_POSSIBLE:
+				if DEBUG_DONT_EXIT_ON_OPTIMAL_GUESS:
+					log(
+						'Guess %i, option %i/%i %s: This guess is optimal, would stop searching but DEBUG_DONT_EXIT_ON_OPTIMAL_GUESS is set' % (
+							recursive_depth + 1, guess_idx + 1, len(guesses_to_try), guess.upper()
+					))
+				else:
+					log(
+						'Guess %i, option %i/%i %s: This guess is optimal, not searching any further' % (
+							recursive_depth + 1, guess_idx + 1, len(guesses_to_try), guess.upper()
+					))
+					break
+
+		return best_guess, best_guess_score
+
 
 	def get_best_guess(self) -> Optional[str]:
 
@@ -442,15 +649,16 @@ class Solver:
 			# Instead just use whichever has the most common letters
 			return self._prune_and_sort_guesses(self.allowed_words, None)[0]
 
-		elif num_possible_solutions > 10:
-			# Brute force search based on what eliminates the most possible solutions
-			# This algorithm will prioritize the most common letters, so it's effective even for very large sets
-			return self._brute_force_guess_for_fewest_remaining_words(max_num_matches=self.complexity_limit)
-
 		elif num_possible_solutions > 2:
-			# TODO: brute force search based on fewest number of guesses needed to solve puzzle
-			# This would make search space massive, which is why we'd only do it when few remaining solutions
-			return self._brute_force_guess_for_fewest_remaining_words(max_num_matches=self.complexity_limit)
+
+			if num_possible_solutions <= self.params.recursion_max_solutions:
+				# Search based on fewest number of guesses needed to solve puzzle
+				# This makes the search space massive, which is why we only do it when few remaining solutions
+				return self._solve_recursive(max_num_matches=self.complexity_limit)
+			else:
+				# Brute force search based on what eliminates the most possible solutions
+				# This algorithm will prioritize the most common letters, so it's effective even for very large sets
+				return self._brute_force_guess_for_fewest_remaining_words(max_num_matches=self.complexity_limit)
 
 		elif num_possible_solutions == 2:
 			# No possible way to pick
