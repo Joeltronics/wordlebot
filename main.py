@@ -29,6 +29,9 @@ DEFAULT_NUM_BENCHMARK = 50
 
 
 def parse_args():
+
+	default_params = SolverParams()
+
 	parser = argparse.ArgumentParser()
 
 	group = parser.add_argument_group('Game')
@@ -43,8 +46,8 @@ def parse_args():
 		'-l', dest='limit', type=float, default=4,
 		help='Limit solver search space complexity (i.e. higher will do a better job of solving, but run much slower). Specified as a power of 10. Default 4.')
 	group.add_argument(
-		'-r', metavar='SOLUTIONS', dest='recursion', type=int, default=20,
-		help='Use recursive lookahead when this many or fewer solutions remain')
+		'-r', metavar='SOLUTIONS', dest='recursion', type=int, default=default_params.recursion_max_solutions,
+		help=f'Use recursive lookahead when this many or fewer solutions remain, default {default_params.recursion_max_solutions}')
 	group.add_argument('--agnostic', action='store_true', help='Make solver unaware of limited set of possible solutions')
 
 	group = parser.add_argument_group('Benchmarking & A/B testing')
@@ -251,10 +254,20 @@ def play_game(solution, solver: Solver, auto_solve: bool, endless=False, silent=
 				game_print('Only 1 possible solution: %s' % tuple(solver.get_possible_solitions())[0].upper())
 
 			if num_possible_solutions > 2:
-				most_common_unsolved_letters = solver.get_most_common_unsolved_letters()
+
+				unsolved_letters_overall_counter, unsolved_letter_positional_counters = \
+					solver.get_unsolved_letters_counter(per_position=True)
+
 				game_print(
 					'Order of most common unsolved letters: ' +
-					''.join([letter.upper() for letter, frequency in most_common_unsolved_letters]))
+					''.join([letter.upper() for letter, frequency in unsolved_letters_overall_counter.most_common()]))
+
+				for position_idx, position_counter in enumerate(unsolved_letter_positional_counters):
+					if position_counter is None:
+						continue
+					game_print(
+						f'Order of most common position {position_idx + 1} letters: ' +
+						''.join([letter.upper() for letter, frequency in position_counter.most_common()]))
 
 			game_print()
 			solver_guess = solver.get_best_guess()
@@ -359,7 +372,7 @@ class ABTestInstance:
 
 def make_solver_params(args, recursion_max_solutions=None) -> SolverParams:
 	return SolverParams(
-		recursion_max_solutions=(recursion_max_solutions if recursion_max_solutions is not None else args.recursion)
+		recursion_max_solutions=(recursion_max_solutions if recursion_max_solutions is not None else args.recursion),
 	)
 
 
@@ -387,7 +400,7 @@ def benchmark(args, a_b_test: bool, num_benchmark=50):
 			#ABTestInstance(name='Complexity 100,000', solver_args=dict(complexity_limit=100000)),
 
 			ABTestInstance(name='Non-recursive', solver_args=dict(valid_solutions=word_list.words, params=make_solver_params(args, recursion_max_solutions=0))),
-			ABTestInstance(name='Recursive', solver_args=dict(valid_solutions=word_list.solutions, params=make_solver_params(args, recursion_max_solutions=20))),
+			ABTestInstance(name='Recursive', solver_args=dict(valid_solutions=word_list.solutions, params=make_solver_params(args))),
 		]
 	else:
 		a_b_tests = [
@@ -451,7 +464,7 @@ def benchmark(args, a_b_test: bool, num_benchmark=50):
 		print_str = '%8s' % solution.upper()
 
 		for num_guesses, duration in results_per_solver:
-			print_str += '   %s%7i%s   %.3f' % (
+			print_str += '   %s%7i%s %7.3f' % (
 				get_format_for_num_guesses(num_guesses), num_guesses, Style.RESET_ALL,
 				duration
 			)

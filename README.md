@@ -9,7 +9,7 @@ Though if you've already played a game of Wordle and want to see what the solver
 
 ## How does it work?
 
-For the first guess, choose whichever word uses the most common letters in the list of possible solutions.
+For the first guess, score words based on the most common letters in the list of possible solutions - 2 points if the letter is in the same position in a given solution and is the first occurence of this letter in the guess; 1 point if it's in a different position, or the same position but it's not the first occurence in a guess.
 
 For next guesses while there are still lots of solutions left, use the heuristic of which guess will best narrow down the remaining possible solutions.
 "Best" is difficult to quanitify here - there are a few different ways this could be chosen, such as worst-case (minimax), lowest average, or lowest mean-squared.
@@ -46,11 +46,7 @@ That means, after finding such a guess, we could reduce the search space to only
 
 #### Pruning improvements
 
-The guess pruning algorithm itself could stand to be improved - right now it just looks for most common unsolved letters
-in words, but doesn't account for letter position, yellow letters, or multiple of the same letter in the word.
-The first guess is chosen using this same algorithm, so it would also benefit from any improvements here.
-
-The pruning of solutions to check against is also very basic - the goal is to remove solutions that are most similar to
+The pruning of solutions to check against is very basic - the goal is to remove solutions that are most similar to
 existing solutions, which is currently achieved by just sorting the list and taking every N results.
 This is an _okay_ way of accomplishing this goal, but it could definitely be improved.
 

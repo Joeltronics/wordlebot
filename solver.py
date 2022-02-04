@@ -29,7 +29,7 @@ class SolverParams:
 
 	recursion_max_solutions: int = 0
 	# Non-solution guesses may be added to pad guess list, up to this many total guesses
-	recursion_pad_num_guesses: int = 20
+	recursion_pad_num_guesses: int = 12
 
 	# "Best solution" score weights
 
@@ -118,11 +118,14 @@ class Solver:
 		self.possible_solutions = {word for word in self.possible_solutions if self._is_valid_for_guess(word, this_guess)}
 		assert len(self.possible_solutions) > 0
 
+		# TODO: in theory, could use process of elimination to sometimes guarantee position from yellow letters
+		# A simple way to do this would be to look at remaining possible solutions instead of past character statuses
+		# However, I suspect this is unlikely to actually make much of a difference in practice
 		for idx in range(5):
 			if character_statuses[idx] == CharStatus.correct:
 				self.solved_letters[idx] = guess_word[idx]
 
-	def get_unsolved_letters_counter(self):
+	def get_unsolved_letters_counter(self, per_position=False):
 
 		def _remove_solved_letters(word):
 			return ''.join([
@@ -134,7 +137,20 @@ class Solver:
 		all_chars = ''.join(words_solved_chars_removed)
 		counter = collections.Counter(all_chars)
 
-		return counter
+		if not per_position:
+			return counter
+
+		position_counters = [None for _ in range(5)]
+
+		for position_idx in range(5):
+			if self.solved_letters[position_idx] is not None:
+				continue
+
+			position_counters[position_idx] = collections.Counter([
+				word[position_idx] for word in self.possible_solutions
+			])
+
+		return counter, position_counters
 
 	def get_most_common_unsolved_letters(self):
 		return self.get_unsolved_letters_counter().most_common()
@@ -156,17 +172,33 @@ class Solver:
 		"""
 		return len(self._solutions_remaining(guess=guess, possible_solution=possible_solution, solutions=solutions))
 
-	def _score_guesses(self, guesses: Iterable[str], sort=True) -> List[Tuple[str, int]]:
+	def _score_guesses(self, guesses: Iterable[str], positional: bool, sort=True, debug_log=False) -> List[Tuple[str, int]]:
 		"""
 		Score guesses based on occurrence of most common unsolved letters
 		"""
 
-		# TODO: this doesn't take letter position (nor yellow letters) into account
+		if positional:
+			counter_overall, counters_per_position = self.get_unsolved_letters_counter(per_position=True)
+			def _score(word):
 
-		counter = self.get_unsolved_letters_counter()
+				score_unique_letters = sum([
+					counter_overall[unique_letter]
+					for unique_letter
+					in set(word)
+				])
 
-		def _score(word):
-			return sum([counter[unique_letter] for unique_letter in set(word)])
+				score_positional = sum([
+					counter[letter]
+					for letter, counter
+					in zip(word, counters_per_position)
+					if counter is not None
+				])
+
+				return score_unique_letters + score_positional
+		else:
+			counter = self.get_unsolved_letters_counter()
+			def _score(word):
+				return sum([counter[unique_letter] for unique_letter in set(word)])
 
 		# Pre-sort guesses so that this will be deterministic in case of tied score
 		guesses = sorted(list(guesses))
@@ -176,13 +208,29 @@ class Solver:
 		if sort:
 			guesses.sort(key=lambda guess_and_score: guess_and_score[1], reverse=True)
 
+		if debug_log:
+			num_solutions = len(self.possible_solutions)
+			if len(guesses) > 10:
+				self.print_level(SolverVerbosity.verbose_debug, 'Best guesses:')
+				for guess, score in guesses[:10]:
+					self.print_level(SolverVerbosity.verbose_debug, '  %s %.2f' % (guess.upper(), score / num_solutions))
+				self.dprint('Worst guesses:')
+				for guess, score in guesses[-10:]:
+					self.print_level(SolverVerbosity.verbose_debug,'  %s %.2f' % (guess.upper(), score / num_solutions))
+			else:
+				self.print_level('All guesses:')
+				for guess, score in guesses:
+					self.print_level(SolverVerbosity.verbose_debug,'  %s %.2f' % (guess.upper(), score / num_solutions))
+
 		return guesses
 
 	def _prune_and_sort_guesses(
 			self,
 			guesses: Iterable[str],
 			max_num: Optional[int],
+			positional = True,
 			return_score = False,
+			debug_log = False,
 	) -> List[Union[str, Tuple[str, int]]]:
 		"""
 		Prune guesses based on occurrence of most common unsolved letters
@@ -190,7 +238,7 @@ class Solver:
 
 		# TODO: option to prioritize (or even force) guesses that are solutions
 
-		guesses_scored = self._score_guesses(guesses)
+		guesses_scored = self._score_guesses(guesses, sort=True, positional=positional, debug_log=debug_log)
 
 		# TODO: could it be an overall improvement to randomly mix in a few with less common letters too?
 		# i.e. instead of a hard cutoff at max_num, make it a gradual "taper off" where we start picking fewer and fewer words from later in the list
@@ -479,6 +527,12 @@ class Solver:
 
 		self.print(f'Checking against {num_possible_solutions} solutions, recursively...')
 		best_guess, best_score = self._solve_recursive_inner(possible_solutions=solutions_sorted, recursive_depth=0)
+
+		if best_guess is None:
+			self.dprint()
+			self.print('Failed to find a guess!')
+			return None
+
 		self.dprint()
 		self.print(f'Best guess {best_guess.upper()} (worst case: solve in {best_score} more guesses after this one)')
 		return best_guess
@@ -680,7 +734,7 @@ class Solver:
 			# First guess
 			# Regular algorithm is O(n^2), which is way too slow
 			# Instead just use whichever has the most common letters
-			return self._prune_and_sort_guesses(self.allowed_words, None)[0]
+			return self._prune_and_sort_guesses(self.allowed_words, None, positional=True, debug_log=True)[0]
 
 		elif num_possible_solutions > 2:
 
