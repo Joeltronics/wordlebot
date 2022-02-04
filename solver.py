@@ -10,7 +10,7 @@ from typing import Tuple, Iterable, Optional, Union
 from game_types import *
 
 
-RECURSION_HARD_LIMIT = 7
+RECURSION_HARD_LIMIT = 5
 DEBUG_DONT_EXIT_ON_OPTIMAL_GUESS = False
 
 
@@ -517,6 +517,7 @@ class Solver:
 		non_solution_guesses_to_try = list(self.allowed_words - self.possible_solutions)
 		solution_guesses_to_try = list(self.possible_solutions)
 
+		# FIXME: prune_and_sort_guesses is based on self.possible_solutions, not possible_solutions
 		solution_guesses_to_try_scored = self._prune_and_sort_guesses(
 			solution_guesses_to_try, max_num=None)
 		non_solution_guesses_to_try_scored = self._prune_and_sort_guesses(
@@ -534,14 +535,23 @@ class Solver:
 			if recursive_depth == 0:
 				log('')
 
+			# Limit depth - no point searching any deeper than current minimax
+
+			if best_guess_score is not None:
+				this_recursion_depth_limit = best_guess_score - 1
+			else:
+				this_recursion_depth_limit = recursion_depth_limit
+
 			if len(possible_solutions) <= 6:
-				log('Guess %i, option %i/%i %s: checking against %i solutions: %s' % (
+				log('Guess %i, option %i/%i %s: checking against %i solutions to a max depth of %i: %s' % (
 					recursive_depth + 1, guess_idx + 1, len(guesses_to_try), guess.upper(), len(possible_solutions),
+					this_recursion_depth_limit,
 					' '.join([solution.upper() for solution in possible_solutions])
 				))
 			else:
-				log('Guess %i, option %i/%i %s: checking against %i solutions' % (
-					recursive_depth + 1, guess_idx + 1, len(guesses_to_try), guess.upper(), len(possible_solutions)
+				log('Guess %i, option %i/%i %s: checking against %i solutions to a max depth of %i' % (
+					recursive_depth + 1, guess_idx + 1, len(guesses_to_try), guess.upper(), len(possible_solutions),
+					this_recursion_depth_limit,
 				))
 
 			remaining_possible_solutions = copy(possible_solutions)
@@ -567,7 +577,7 @@ class Solver:
 				assert len(remaining_possible_solutions) < len_at_start_of_loop
 
 				if len(possible_solutions_this_guess) == 1:
-					log('  Solution possibility %i/%i %s, would have down to 1, guaranteed 1 more guess' % (
+					log('  Solution possibility %i/%i %s, would have down to 1 solution, guaranteed 1 more guess' % (
 						total_num_possible_solutions - len_at_start_of_loop + 1,
 						total_num_possible_solutions,
 						possible_solutions_this_guess[0].upper(),
@@ -575,7 +585,7 @@ class Solver:
 					this_solution_score = 1
 
 				elif len(possible_solutions_this_guess) == 2:
-					log('  Solution possibilities %i-%i/%i %s/%s, would have down to 2, worst case 2 more guesses' % (
+					log('  Solution possibilities %i-%i/%i %s/%s, would have down to 2 solutions, worst case 2 more guesses' % (
 						total_num_possible_solutions - len_at_start_of_loop + 1,
 						total_num_possible_solutions - len_at_start_of_loop + len(possible_solutions_this_guess),
 						total_num_possible_solutions,
@@ -585,19 +595,12 @@ class Solver:
 					this_solution_score = 2
 
 				else:
-					log('  Solution possibilities %i-%i/%i, would have down to %i' % (
+					log('  Solution possibilities %i-%i/%i, would have down to %i solutions' % (
 						total_num_possible_solutions - len_at_start_of_loop + 1,
 						total_num_possible_solutions - len_at_start_of_loop + len(possible_solutions_this_guess),
 						total_num_possible_solutions,
 						len(possible_solutions_this_guess),
 					))
-
-					# Search recursively, but limit depth - no point searching any deeper than current minimax
-
-					if best_guess_score is not None:
-						this_recursion_depth_limit = best_guess_score - 1
-					else:
-						this_recursion_depth_limit = recursion_depth_limit
 
 					next_recursive_depth = recursive_depth + 1
 
@@ -684,7 +687,14 @@ class Solver:
 			if num_possible_solutions <= self.params.recursion_max_solutions:
 				# Search based on fewest number of guesses needed to solve puzzle
 				# This makes the search space massive, which is why we only do it when few remaining solutions
-				return self._solve_recursive(max_num_matches=self.complexity_limit)
+				guess = self._solve_recursive(max_num_matches=self.complexity_limit)
+
+				if guess is not None:
+					return guess
+
+				self.print('Recursive search failed, trying iterative')
+				return self._brute_force_guess_for_fewest_remaining_words(max_num_matches=self.complexity_limit)
+
 			else:
 				# Brute force search based on what eliminates the most possible solutions
 				# This algorithm will prioritize the most common letters, so it's effective even for very large sets
