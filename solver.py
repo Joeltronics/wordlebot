@@ -125,7 +125,7 @@ class Solver:
 			if character_statuses[idx] == CharStatus.correct:
 				self.solved_letters[idx] = guess_word[idx]
 
-	def get_unsolved_letters_counter(self, per_position=False):
+	def get_unsolved_letters_counter(self, possible_solutions: Optional[list[str]] = None, per_position=False):
 
 		def _remove_solved_letters(word):
 			return ''.join([
@@ -133,7 +133,10 @@ class Solver:
 				for letter, solved_letter in zip(word, self.solved_letters)
 			])
 
-		words_solved_chars_removed = [_remove_solved_letters(word) for word in self.possible_solutions]
+		if possible_solutions is None:
+			possible_solutions = self.possible_solutions
+
+		words_solved_chars_removed = [_remove_solved_letters(word) for word in possible_solutions]
 		all_chars = ''.join(words_solved_chars_removed)
 		counter = collections.Counter(all_chars)
 
@@ -147,7 +150,7 @@ class Solver:
 				continue
 
 			position_counters[position_idx] = collections.Counter([
-				word[position_idx] for word in self.possible_solutions
+				word[position_idx] for word in possible_solutions
 			])
 
 		return counter, position_counters
@@ -172,13 +175,19 @@ class Solver:
 		"""
 		return len(self._solutions_remaining(guess=guess, possible_solution=possible_solution, solutions=solutions))
 
-	def _score_guesses(self, guesses: Iterable[str], positional: bool, sort=True, debug_log=False) -> List[Tuple[str, int]]:
+	def _score_guesses(
+			self,
+			guesses: Iterable[str],
+			positional: bool,
+			possible_solutions: Optional[Iterable[str]] = None,
+			sort=True,
+			debug_log=False) -> List[Tuple[str, int]]:
 		"""
 		Score guesses based on occurrence of most common unsolved letters
 		"""
 
 		if positional:
-			counter_overall, counters_per_position = self.get_unsolved_letters_counter(per_position=True)
+			counter_overall, counters_per_position = self.get_unsolved_letters_counter(per_position=True, possible_solutions=possible_solutions)
 			def _score(word):
 
 				score_unique_letters = sum([
@@ -196,7 +205,7 @@ class Solver:
 
 				return score_unique_letters + score_positional
 		else:
-			counter = self.get_unsolved_letters_counter()
+			counter = self.get_unsolved_letters_counter(possible_solutions=possible_solutions)
 			def _score(word):
 				return sum([counter[unique_letter] for unique_letter in set(word)])
 
@@ -211,16 +220,20 @@ class Solver:
 		if debug_log:
 			num_solutions = len(self.possible_solutions)
 			if len(guesses) > 10:
-				self.print_level(SolverVerbosity.verbose_debug, 'Best guesses:')
-				for guess, score in guesses[:10]:
+				self.print_level(SolverVerbosity.debug, 'Best guesses:')
+				for guess, score in guesses[:5]:
+					self.print_level(SolverVerbosity.debug, '  %s %.2f' % (guess.upper(), score / num_solutions))
+				for guess, score in guesses[5:10]:
 					self.print_level(SolverVerbosity.verbose_debug, '  %s %.2f' % (guess.upper(), score / num_solutions))
-				self.dprint('Worst guesses:')
+
+				self.print_level(SolverVerbosity.verbose_debug,'Worst guesses:')
 				for guess, score in guesses[-10:]:
 					self.print_level(SolverVerbosity.verbose_debug,'  %s %.2f' % (guess.upper(), score / num_solutions))
+
 			else:
 				self.print_level('All guesses:')
 				for guess, score in guesses:
-					self.print_level(SolverVerbosity.verbose_debug,'  %s %.2f' % (guess.upper(), score / num_solutions))
+					self.print_level(SolverVerbosity.debug,'  %s %.2f' % (guess.upper(), score / num_solutions))
 
 		return guesses
 
@@ -228,6 +241,7 @@ class Solver:
 			self,
 			guesses: Iterable[str],
 			max_num: Optional[int],
+			possible_solutions: Optional[list[str]] = None,
 			positional = True,
 			return_score = False,
 			debug_log = False,
@@ -238,7 +252,7 @@ class Solver:
 
 		# TODO: option to prioritize (or even force) guesses that are solutions
 
-		guesses_scored = self._score_guesses(guesses, sort=True, positional=positional, debug_log=debug_log)
+		guesses_scored = self._score_guesses(guesses, sort=True, positional=positional, debug_log=debug_log, possible_solutions=possible_solutions)
 
 		# TODO: could it be an overall improvement to randomly mix in a few with less common letters too?
 		# i.e. instead of a hard cutoff at max_num, make it a gradual "taper off" where we start picking fewer and fewer words from later in the list
@@ -571,11 +585,10 @@ class Solver:
 		non_solution_guesses_to_try = list(self.allowed_words - self.possible_solutions)
 		solution_guesses_to_try = list(self.possible_solutions)
 
-		# FIXME: prune_and_sort_guesses is based on self.possible_solutions, not possible_solutions
 		solution_guesses_to_try_scored = self._prune_and_sort_guesses(
-			solution_guesses_to_try, max_num=None)
+			solution_guesses_to_try, max_num=None, possible_solutions=possible_solutions)
 		non_solution_guesses_to_try_scored = self._prune_and_sort_guesses(
-			non_solution_guesses_to_try, max_num=num_non_solutions_to_try)
+			non_solution_guesses_to_try, max_num=num_non_solutions_to_try, possible_solutions=possible_solutions)
 
 		guesses_to_try = solution_guesses_to_try_scored + non_solution_guesses_to_try_scored
 

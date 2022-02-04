@@ -34,9 +34,6 @@ Similarly, recursive & heuristic don't need to be mutually exclusive, as they ar
 For example, we could search 1 or 2 levels recursively, and then use heuristics on the next level after that.
 I suspect this would work quite well, and I would like to explore this in the future.
 
-There's also a bug in the recursive algorithm, which causes it not to pick optimal non-solution guesses to try past the first recursion level, and not search solution guesses in the most efficient order.
-This is labelled with a FIXME in `solver.py`.
-
 #### Non-recursive algorithm improvements
 
 We exit the loop early after finding a "perfect" guess - no point in keeping searching if it can't be beaten.
