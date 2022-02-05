@@ -399,7 +399,8 @@ def benchmark(args, a_b_test: bool, num_benchmark=50):
 			#ABTestInstance(name='Complexity 1,000', solver_args=dict(complexity_limit=1000)),
 			#ABTestInstance(name='Complexity 100,000', solver_args=dict(complexity_limit=100000)),
 
-			ABTestInstance(name='Non-recursive', solver_args=dict(valid_solutions=word_list.words, params=make_solver_params(args, recursion_max_solutions=0))),
+			#ABTestInstance(name='Letters only', solver_args=dict(complexity_limit=1, valid_solutions=word_list.words, params=make_solver_params(args, recursion_max_solutions=0))),
+			ABTestInstance(name='Heuristic', solver_args=dict(valid_solutions=word_list.words, params=make_solver_params(args, recursion_max_solutions=0))),
 			ABTestInstance(name='Recursive', solver_args=dict(valid_solutions=word_list.solutions, params=make_solver_params(args))),
 		]
 	else:

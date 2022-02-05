@@ -175,7 +175,7 @@ class Solver:
 		"""
 		return len(self._solutions_remaining(guess=guess, possible_solution=possible_solution, solutions=solutions))
 
-	def _score_guesses(
+	def _preliminary_score_guesses(
 			self,
 			guesses: Iterable[str],
 			positional: bool,
@@ -252,7 +252,7 @@ class Solver:
 
 		# TODO: option to prioritize (or even force) guesses that are solutions
 
-		guesses_scored = self._score_guesses(guesses, sort=True, positional=positional, debug_log=debug_log, possible_solutions=possible_solutions)
+		guesses_scored = self._preliminary_score_guesses(guesses, sort=True, positional=positional, debug_log=debug_log, possible_solutions=possible_solutions)
 
 		# TODO: could it be an overall improvement to randomly mix in a few with less common letters too?
 		# i.e. instead of a hard cutoff at max_num, make it a gradual "taper off" where we start picking fewer and fewer words from later in the list
@@ -365,14 +365,15 @@ class Solver:
 				f' ({total_num_matches:,} total matches)...'
 			)
 
-	def _brute_force_guess_for_fewest_remaining_words(self, max_num_matches: Optional[int] = None) -> str:
+	def _solve_fewest_remaining_words(self, max_num_matches: Optional[int] = None) -> str:
 		"""
+		Find best guess, based on heuristic of which guess will narrow down to the fewest remaining words
 		"""
 
 		"""
 		The overall algorithm is O(n^3):
-		  1. in _brute_force_guess_for_fewest_remaining_words_list(), loop over guesses
-		  2. in _brute_force_guess_for_fewest_remaining_words_list(), loop over solutions_to_check_possible
+		  1. in _solve_fewest_remaining_words_from_lists(), loop over guesses
+		  2. in _solve_fewest_remaining_words_from_lists(), loop over solutions_to_check_possible
 		  3. in _num_solutions_remaining(), another loop over solutions_to_check_num_remaining
 		"""
 
@@ -424,14 +425,51 @@ class Solver:
 
 		# Process the pruned lists
 
-		ret, score = self._brute_force_guess_for_fewest_remaining_words_from_lists(
+		ret, score = self._solve_fewest_remaining_words_from_lists(
 			guesses=guesses_to_try,
 			solutions_to_check_possible=solutions_to_check_possible,
 			solutions_to_check_num_remaining=solutions_to_check_num_remaining)
 
 		return ret
 
-	def _brute_force_guess_for_fewest_remaining_words_from_lists(
+	def _score_guess_fewest_remaining_words(
+			self,
+			guess: str,
+			is_possible_solution: bool,
+			solutions_to_check_possible,
+			solutions_to_check_num_remaining,
+			words_remaining_multiplier=1.0,
+	):
+
+		max_words_remaining = None
+		sum_words_remaining = 0
+		sum_squared = 0
+		for possible_solution in solutions_to_check_possible:
+			words_remaining = self._num_solutions_remaining(guess, possible_solution,
+															solutions=solutions_to_check_num_remaining)
+			sum_words_remaining += words_remaining
+			sum_squared += (words_remaining ** 2)
+			max_words_remaining = max(words_remaining, max_words_remaining) if (
+						max_words_remaining is not None) else words_remaining
+
+		mean_squared_words_remaining = \
+			sum_squared / len(solutions_to_check_possible) * words_remaining_multiplier
+
+		mean_words_remaining = \
+			sum_words_remaining / len(solutions_to_check_possible) * words_remaining_multiplier
+
+		max_words_remaining = int(round(max_words_remaining * words_remaining_multiplier))
+
+		# TODO: when solutions_to_check_possible_ratio > 1, max will be inaccurate; weight it lower
+		score = \
+			(self.params.score_weight_max * max_words_remaining) + \
+			(self.params.score_weight_mean * mean_words_remaining) + \
+			(self.params.score_weight_mean_squared * mean_squared_words_remaining) + \
+			(0 if is_possible_solution else self.params.score_penalty_non_solution)
+
+		return score, max_words_remaining, mean_words_remaining, mean_squared_words_remaining
+
+	def _solve_fewest_remaining_words_from_lists(
 			self,
 			guesses: Iterable[str],
 			solutions_to_check_possible: Iterable[str] = None,
@@ -456,35 +494,18 @@ class Solver:
 		lowest_score = None
 		for guess_idx, guess in enumerate(guesses):
 
-			# Slightly prioritize possible solutions
+			if (guess_idx + 1) % 200 == 0:
+				self.dprint('%i/%i...' % (guess_idx + 1, len(guesses)))
+
 			is_possible_solution = guess in self.possible_solutions
 
-			if (guess_idx + 1) % 200 == 0:
-				self.dprint('%i/%i...' % (guess_idx+1, len(guesses)))
-
-			max_words_remaining = None
-			sum_words_remaining = 0
-			sum_squared = 0
-			for possible_solution in solutions_to_check_possible:
-				words_remaining = self._num_solutions_remaining(guess, possible_solution, solutions=solutions_to_check_num_remaining)
-				sum_words_remaining += words_remaining
-				sum_squared += (words_remaining ** 2)
-				max_words_remaining = max(words_remaining, max_words_remaining) if (max_words_remaining is not None) else words_remaining
-
-			mean_squared_words_remaining = \
-				sum_squared / len(solutions_to_check_possible) * solutions_to_check_possible_ratio
-
-			mean_words_remaining = \
-				sum_words_remaining / len(solutions_to_check_possible) * solutions_to_check_possible_ratio
-
-			max_words_remaining = int(round(max_words_remaining * solutions_to_check_possible_ratio))
-
-			# TODO: when solutions_to_check_possible_ratio > 1, max will be inaccurate; weight it lower
-			score = \
-				(self.params.score_weight_max * max_words_remaining) + \
-				(self.params.score_weight_mean * mean_words_remaining) + \
-				(self.params.score_weight_mean_squared * mean_squared_words_remaining) + \
-				(0 if is_possible_solution else self.params.score_penalty_non_solution)
+			score, max_words_remaining, mean_words_remaining, mean_squared_words_remaining = \
+				self._score_guess_fewest_remaining_words(
+					guess=guess,
+					solutions_to_check_possible=solutions_to_check_possible,
+					solutions_to_check_num_remaining=solutions_to_check_num_remaining,
+					words_remaining_multiplier=solutions_to_check_possible_ratio,
+					is_possible_solution=is_possible_solution)
 
 			if (not limited_solutions_to_check_possible) and (max_words_remaining == 1):
 				if is_possible_solution:
@@ -495,7 +516,7 @@ class Solver:
 					lowest_score = score
 					break
 				else:
-					pass  # TODO: after this, we only need to check possible solutions
+					pass  # TODO: can eliminate all remaining guesses that aren't possible solutions here
 
 			is_lowest_average = lowest_average is None or mean_words_remaining < lowest_average
 			is_lowest_max = lowest_max is None or max_words_remaining < lowest_max
@@ -532,15 +553,15 @@ class Solver:
 
 		return best_guess, lowest_score
 
-	def _solve_recursive(self, max_num_matches: Optional[int] = None) -> str:
+	def _solve_recursive(self) -> str:
 
-		# TODO: use max_num_matches
+		# TODO: find a way to limit complexity to get consistent time performance out of this
 
 		solutions_sorted = sorted(list(self.possible_solutions))
 		num_possible_solutions = len(solutions_sorted)
 
 		self.print(f'Checking against {num_possible_solutions} solutions, recursively...')
-		best_guess, best_score = self._solve_recursive_inner(possible_solutions=solutions_sorted, recursive_depth=0)
+		best_guess, best_score = self._solve_recursive_minimax(possible_solutions=solutions_sorted, recursive_depth=0)
 
 		if best_guess is None:
 			self.dprint()
@@ -551,8 +572,48 @@ class Solver:
 		self.print(f'Best guess {best_guess.upper()} (worst case: solve in {best_score} more guesses after this one)')
 		return best_guess
 
+	def _determine_guesses_for_recursive_solving(
+			self,
+			possible_solutions: Iterable[str]):
 
-	def _solve_recursive_inner(
+		# Try all solutions, add in some non-solutions
+		# TODO: When lots remaining, should prioritize non-solution guesses (even removing some solution guesses)
+		"""
+		Current logic, with pad_num_guesses 20:
+
+		>= 20 solutions: try them all
+		10-20 solutions: try all the solutions, and pad other guesses to hit 20
+		<= 10 solutions: try all the solutions, and an equal number of non-solutions
+
+		e.g.
+		12 solutions: try 12 solution + 8 non solution = 20 total
+		10 solutions: try 10 solution + 10 non solution = 20 total
+		5 solutions: try 5 solution + 5 non solution = 10 total
+		3 solutions: try 3 solution + 3 non solution = 6 total
+		"""
+
+		total_num_possible_solutions = len(possible_solutions)
+		num_guesses_to_try = max(self.params.recursion_pad_num_guesses, total_num_possible_solutions)
+
+		# Never try more non-solutions than solutions
+		# i.e. if recursion_pad_num_guesses == 20, but if there are only 3 solutions left,
+		# then it's not worth checking 17 non-solutions, so just check 3 solutions + the top 3 non-solutions
+		num_non_solutions_to_try = min(num_guesses_to_try - total_num_possible_solutions, total_num_possible_solutions)
+
+		non_solution_guesses_to_try = list(self.allowed_words - set(possible_solutions))
+		solution_guesses_to_try = list(possible_solutions)
+
+		solution_guesses_to_try_scored = self._prune_and_sort_guesses(
+			solution_guesses_to_try, max_num=None, possible_solutions=possible_solutions)
+
+		non_solution_guesses_to_try_scored = self._prune_and_sort_guesses(
+			non_solution_guesses_to_try, max_num=num_non_solutions_to_try, possible_solutions=possible_solutions)
+
+		guesses_to_try = solution_guesses_to_try_scored + non_solution_guesses_to_try_scored
+
+		return guesses_to_try
+
+	def _solve_recursive_minimax(
 			self,
 			possible_solutions: Iterable[str],
 			recursive_depth: int,
@@ -571,32 +632,10 @@ class Solver:
 
 		total_num_possible_solutions = len(possible_solutions)
 
-		# Determine guesses to try
-		# Try all solutions, add in some non-solutions
-		# TODO: When lots remaining, should prioritize non-solution guesses (even removing some solution guesses)
-
-		num_guesses_to_try = max(self.params.recursion_pad_num_guesses, total_num_possible_solutions)
-
-		# Never try more non-solutions than solutions
-		# i.e. if recursion_pad_num_guesses == 20, but if there are only 3 solutions left,
-		# then it's not worth checking 17 non-solutions, so just check 3 solutions + the top 3 non-solutions
-		num_non_solutions_to_try = min(num_guesses_to_try - total_num_possible_solutions, total_num_possible_solutions)
-
-		non_solution_guesses_to_try = list(self.allowed_words - set(possible_solutions))
-		solution_guesses_to_try = list(possible_solutions)
-
-		solution_guesses_to_try_scored = self._prune_and_sort_guesses(
-			solution_guesses_to_try, max_num=None, possible_solutions=possible_solutions)
-		non_solution_guesses_to_try_scored = self._prune_and_sort_guesses(
-			non_solution_guesses_to_try, max_num=num_non_solutions_to_try, possible_solutions=possible_solutions)
-
-		guesses_to_try = solution_guesses_to_try_scored + non_solution_guesses_to_try_scored
-
-		# Now search for best guess
+		guesses_to_try = self._determine_guesses_for_recursive_solving(possible_solutions=possible_solutions)
 
 		best_guess = None
 		best_guess_score = None
-
 		for guess_idx, guess in enumerate(guesses_to_try):
 
 			if recursive_depth == 0:
@@ -682,7 +721,7 @@ class Solver:
 						break
 
 					else:
-						this_level_best_guess, this_level_best_score = self._solve_recursive_inner(
+						this_level_best_guess, this_level_best_score = self._solve_recursive_minimax(
 							possible_solutions=possible_solutions_this_guess,
 							recursive_depth=next_recursive_depth,
 							recursion_depth_limit=this_recursion_depth_limit,
@@ -719,9 +758,8 @@ class Solver:
 					recursive_depth + 1, guess_idx + 1, len(guesses_to_try), guess.upper(), best_guess_score,
 				))
 
-			BEST_POSSIBLE = 1
-			assert worst_solution_score >= BEST_POSSIBLE
-			if worst_solution_score == BEST_POSSIBLE:
+			assert worst_solution_score >= 1
+			if worst_solution_score == 1:
 				if DEBUG_DONT_EXIT_ON_OPTIMAL_GUESS:
 					log(
 						'Guess %i, option %i/%i %s: This guess is optimal, would stop searching but DEBUG_DONT_EXIT_ON_OPTIMAL_GUESS is set' % (
@@ -736,7 +774,6 @@ class Solver:
 
 		return best_guess, best_guess_score
 
-
 	def get_best_guess(self) -> Optional[str]:
 
 		num_possible_solutions = len(self.possible_solutions)
@@ -749,24 +786,6 @@ class Solver:
 			# Instead just use whichever has the most common letters
 			return self._prune_and_sort_guesses(self.allowed_words, None, positional=True, debug_log=True)[0]
 
-		elif num_possible_solutions > 2:
-
-			if num_possible_solutions <= self.params.recursion_max_solutions:
-				# Search based on fewest number of guesses needed to solve puzzle
-				# This makes the search space massive, which is why we only do it when few remaining solutions
-				guess = self._solve_recursive(max_num_matches=self.complexity_limit)
-
-				if guess is not None:
-					return guess
-
-				self.print('Recursive search failed, trying iterative')
-				return self._brute_force_guess_for_fewest_remaining_words(max_num_matches=self.complexity_limit)
-
-			else:
-				# Brute force search based on what eliminates the most possible solutions
-				# This algorithm will prioritize the most common letters, so it's effective even for very large sets
-				return self._brute_force_guess_for_fewest_remaining_words(max_num_matches=self.complexity_limit)
-
 		elif num_possible_solutions == 2:
 			# No possible way to pick
 			# Choose the first one alphabetically - that way the behavior is deterministic
@@ -774,6 +793,17 @@ class Solver:
 
 		elif num_possible_solutions == 1:
 			return tuple(self.possible_solutions)[0]
-		
-		else:
-			raise AssertionError
+
+		elif num_possible_solutions <= self.params.recursion_max_solutions:
+			# Search based on fewest number of guesses needed to solve puzzle
+			# This makes the search space massive, which is why we only do it when few remaining solutions
+			guess = self._solve_recursive()
+
+			if guess is not None:
+				return guess
+
+			self.print('Recursive search failed, falling back to iterative')
+
+		# Brute force search based on what eliminates the most possible solutions
+		# This algorithm will prioritize the most common letters, so it's effective even for very large sets
+		return self._solve_fewest_remaining_words(max_num_matches=self.complexity_limit)
