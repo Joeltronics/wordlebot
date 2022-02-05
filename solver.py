@@ -27,9 +27,9 @@ class SolverParams:
 
 	# Recursion: solve for fewest number of guesses needed, instead of heuristics
 
-	recursion_max_solutions: int = 0
+	recursion_max_solutions: int = 12
 	# Non-solution guesses may be added to pad guess list, up to this many total guesses
-	recursion_pad_num_guesses: int = 12
+	recursion_pad_num_guesses: int = 20
 
 	# "Best solution" score weights
 
@@ -580,10 +580,10 @@ class Solver:
 		# Never try more non-solutions than solutions
 		# i.e. if recursion_pad_num_guesses == 20, but if there are only 3 solutions left,
 		# then it's not worth checking 17 non-solutions, so just check 3 solutions + the top 3 non-solutions
-		num_non_solutions_to_try = min(num_guesses_to_try - total_num_possible_solutions, num_guesses_to_try)
+		num_non_solutions_to_try = min(num_guesses_to_try - total_num_possible_solutions, total_num_possible_solutions)
 
-		non_solution_guesses_to_try = list(self.allowed_words - self.possible_solutions)
-		solution_guesses_to_try = list(self.possible_solutions)
+		non_solution_guesses_to_try = list(self.allowed_words - set(possible_solutions))
+		solution_guesses_to_try = list(possible_solutions)
 
 		solution_guesses_to_try_scored = self._prune_and_sort_guesses(
 			solution_guesses_to_try, max_num=None, possible_solutions=possible_solutions)
