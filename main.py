@@ -24,7 +24,6 @@ FORMAT_CORRECT = Back.GREEN + Fore.WHITE
 FORMAT_WRONG_POSITION = Back.YELLOW + Fore.WHITE
 FORMAT_NOT_IN_SOLUTION = Back.WHITE + Fore.BLACK
 
-
 DEFAULT_NUM_BENCHMARK = 50
 
 
@@ -423,10 +422,10 @@ def benchmark(args, a_b_test: bool, num_benchmark=50):
 	print('Benchmarking %i runs...' % num_benchmark)
 	print()
 	if len(a_b_tests) > 1:
-		print('        ' + ''.join(['   %-15s' % test.name for test in a_b_tests]))
-		print('Solution' + ('   Guesses    Time' * len(a_b_tests)))
+		print('           ' + ''.join(['   %-15s' % test.name for test in a_b_tests]))
+		print('   Solution' + ('   Guesses    Time' * len(a_b_tests)))
 	else:
-		print('Solution   Guesses    Time'
+		print('   Solution   Guesses    Time'
 )
 	print()
 
@@ -435,6 +434,8 @@ def benchmark(args, a_b_test: bool, num_benchmark=50):
 		solution = pick_solution(args, deterministic_idx=solution_idx, do_print=False)
 
 		results_per_solver = []
+
+		print('%-4i %5s' % (solution_idx + 1, solution.upper()), end='', flush=True)
 
 		for a_b_test in a_b_tests:
 			this_solver_args = copy(default_solver_args)
@@ -457,6 +458,15 @@ def benchmark(args, a_b_test: bool, num_benchmark=50):
 			a_b_test.add_result(num_guesses=num_guesses, duration=duration)
 			results_per_solver.append((num_guesses, duration))
 
+			print(
+				'   %s%7i%s %7.3f' % (
+					get_format_for_num_guesses(num_guesses), num_guesses, Style.RESET_ALL,
+					duration
+				),
+				end='',
+				flush=True,
+			)
+
 		if len(a_b_tests) == 2:
 			assert len(results_per_solver) == 2
 			a_guesses = results_per_solver[0][0]
@@ -468,15 +478,7 @@ def benchmark(args, a_b_test: bool, num_benchmark=50):
 			else:
 				tied += 1
 
-		print_str = '%8s' % solution.upper()
-
-		for num_guesses, duration in results_per_solver:
-			print_str += '   %s%7i%s %7.3f' % (
-				get_format_for_num_guesses(num_guesses), num_guesses, Style.RESET_ALL,
-				duration
-			)
-
-		print(print_str)
+		print()
 
 	print()
 	print('Benchmarked %s runs:' % num_benchmark)
