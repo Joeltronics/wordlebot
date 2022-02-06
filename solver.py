@@ -31,6 +31,8 @@ class SolverParams:
 	# Non-solution guesses may be added to pad guess list, up to this many total guesses
 	recursion_pad_num_guesses: int = 20
 
+	recursive_minimax: bool = True
+
 	# "Best solution" score weights
 
 	score_weight_mean: int = 1
@@ -553,7 +555,7 @@ class Solver:
 
 		return best_guess, lowest_score
 
-	def _solve_recursive(self) -> str:
+	def _solve_recursive(self, minimax: bool) -> str:
 
 		# TODO: find a way to limit complexity to get consistent time performance out of this
 
@@ -561,7 +563,7 @@ class Solver:
 		num_possible_solutions = len(solutions_sorted)
 
 		self.print(f'Checking against {num_possible_solutions} solutions, recursively...')
-		best_guess, best_score = self._solve_recursive_minimax(possible_solutions=solutions_sorted, recursive_depth=0)
+		best_guess, best_score = self._solve_recursive_inner(possible_solutions=solutions_sorted, recursive_depth=0, minimax=minimax)
 
 		if best_guess is None:
 			self.dprint()
@@ -613,10 +615,11 @@ class Solver:
 
 		return guesses_to_try
 
-	def _solve_recursive_minimax(
+	def _solve_recursive_inner(
 			self,
 			possible_solutions: Iterable[str],
 			recursive_depth: int,
+			minimax: bool = True,
 			recursion_depth_limit: int = RECURSION_HARD_LIMIT,
 	) -> Tuple[str, float]:
 
@@ -641,9 +644,9 @@ class Solver:
 			if recursive_depth == 0:
 				log('')
 
-			# Limit depth - no point searching any deeper than current minimax
+			# Limit depth - if minimax, no point searching any deeper than current minimax
 
-			if best_guess_score is not None:
+			if minimax and (best_guess_score is not None):
 				this_recursion_depth_limit = best_guess_score - 1
 			else:
 				this_recursion_depth_limit = recursion_depth_limit
@@ -664,6 +667,7 @@ class Solver:
 
 			skip_this_guess = False
 			worst_solution_score = None
+			solution_score_sum = 0
 
 			while len(remaining_possible_solutions) > 0:
 
@@ -698,7 +702,7 @@ class Solver:
 						possible_solutions_this_guess[0].upper(),
 						possible_solutions_this_guess[1].upper(),
 					))
-					this_solution_score = 2
+					this_solution_score = 2 if minimax else 1.5
 
 				else:
 					log('  Solution possibilities %i-%i/%i, would have down to %i solutions' % (
@@ -721,10 +725,11 @@ class Solver:
 						break
 
 					else:
-						this_level_best_guess, this_level_best_score = self._solve_recursive_minimax(
+						this_level_best_guess, this_level_best_score = self._solve_recursive_inner(
 							possible_solutions=possible_solutions_this_guess,
 							recursive_depth=next_recursive_depth,
 							recursion_depth_limit=this_recursion_depth_limit,
+							minimax=minimax,
 						)
 
 						if this_level_best_guess is None:
@@ -734,31 +739,51 @@ class Solver:
 
 						this_solution_score = this_level_best_score + 1
 
+				solution_score_sum += this_solution_score * len(possible_solutions_this_guess)
+
+				# For average case, can skip this guess if we know we're guaranteed worse than current best case
+				curr_sum_average = solution_score_sum / len(possible_solutions)
+				if (best_guess_score is not None) and (not minimax) and (curr_sum_average > best_guess_score):
+					log('  Abandoning this guess - current average sum (%.2f) worse than current best (%s %.2f)' % (
+						curr_sum_average, best_guess.upper(), best_guess_score
+					))
+					skip_this_guess = True
+					break
+
 				if (worst_solution_score is None) or (this_solution_score > worst_solution_score):
 					worst_solution_score = this_solution_score
 
 			if skip_this_guess:
 				continue
 
+			average_score = solution_score_sum / len(possible_solutions)
+
 			if worst_solution_score is None:
 				raise RecursionError('All possible guesses hit recursion limit!')
 
-			if (best_guess_score is None) or (worst_solution_score < best_guess_score):
+			score = worst_solution_score if minimax else average_score
+			if (best_guess_score is None) or (score < best_guess_score):
 				best_guess = guess
-				best_guess_score = worst_solution_score
+				best_guess_score = score
 
 			assert best_guess_score >= 1
 
 			if best_guess_score == 1:
+				assert average_score == 1
 				log('Guess %i, option %i/%i %s: Guaranteed to solve in 1 more guess' % (
 					recursive_depth + 1, guess_idx + 1, len(guesses_to_try), guess.upper(),
 				))
-			else:
+			elif minimax:
 				log('Guess %i, option %i/%i %s: Worst case, solve in %i more guesses' % (
 					recursive_depth + 1, guess_idx + 1, len(guesses_to_try), guess.upper(), best_guess_score,
 				))
+			else:
+				log('Guess %i, option %i/%i %s: Average case, solve in %.2f more guesses' % (
+					recursive_depth + 1, guess_idx + 1, len(guesses_to_try), guess.upper(), average_score,
+				))
 
 			assert worst_solution_score >= 1
+
 			if worst_solution_score == 1:
 				if DEBUG_DONT_EXIT_ON_OPTIMAL_GUESS:
 					log(
@@ -797,7 +822,7 @@ class Solver:
 		elif num_possible_solutions <= self.params.recursion_max_solutions:
 			# Search based on fewest number of guesses needed to solve puzzle
 			# This makes the search space massive, which is why we only do it when few remaining solutions
-			guess = self._solve_recursive()
+			guess = self._solve_recursive(minimax=self.params.recursive_minimax)
 
 			if guess is not None:
 				return guess

@@ -49,6 +49,7 @@ def parse_args():
 		'-r', metavar='SOLUTIONS', dest='recursion', type=int, default=default_params.recursion_max_solutions,
 		help=f'Use recursive lookahead when this many or fewer solutions remain, default {default_params.recursion_max_solutions}')
 	group.add_argument('--agnostic', action='store_true', help='Make solver unaware of limited set of possible solutions')
+	group.add_argument('--average', dest='recursive_minimax', action='store_false', help='Recursive solver solves for average instead of minimax')
 
 	group = parser.add_argument_group('Benchmarking & A/B testing')
 	group.add_argument(
@@ -370,9 +371,11 @@ class ABTestInstance:
 			self.num_solved += 1
 
 
-def make_solver_params(args, recursion_max_solutions=None) -> SolverParams:
+def make_solver_params(args, recursion_max_solutions=None, recursive_minimax=None) -> SolverParams:
+
 	return SolverParams(
 		recursion_max_solutions=(recursion_max_solutions if recursion_max_solutions is not None else args.recursion),
+		recursive_minimax=(recursive_minimax if (recursive_minimax is not None) else args.recursive_minimax)
 	)
 
 
@@ -402,6 +405,9 @@ def benchmark(args, a_b_test: bool, num_benchmark=50):
 			#ABTestInstance(name='Letters only', solver_args=dict(complexity_limit=1, valid_solutions=word_list.words, params=make_solver_params(args, recursion_max_solutions=0))),
 			ABTestInstance(name='Heuristic', solver_args=dict(valid_solutions=word_list.words, params=make_solver_params(args, recursion_max_solutions=0))),
 			ABTestInstance(name='Recursive', solver_args=dict(valid_solutions=word_list.solutions, params=make_solver_params(args))),
+
+			#ABTestInstance(name='Recursive minimax', solver_args=dict(valid_solutions=word_list.solutions, params=make_solver_params(args, recursive_minimax=True))),
+			#ABTestInstance(name='Recursive average', solver_args=dict(valid_solutions=word_list.solutions, params=make_solver_params(args, recursive_minimax=False))),
 		]
 	else:
 		a_b_tests = [
