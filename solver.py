@@ -5,6 +5,8 @@ from copy import copy
 from dataclasses import dataclass
 from enum import Enum, unique
 from math import sqrt
+import os
+import sys
 from typing import Tuple, Iterable, Optional, Union
 
 from game_types import *
@@ -85,6 +87,18 @@ class Solver:
 
 		self.guesses = []
 		self.solved_letters = [None] * 5
+
+		self.one_line_print = sys.stdout.isatty() and self.verbosity == SolverVerbosity.regular
+
+	def print_progress(self, s):
+		if self.one_line_print:
+			width = os.get_terminal_size().columns
+			print(' ' * (width - 1), end='\r', flush=False)
+			print(s, end='\r', flush=True)
+
+	def print_progress_complete(self):
+		if self.one_line_print:
+			print('')
 
 	def print_level(self, level: SolverVerbosity, *args, **kwargs) -> None:
 		if self.verbosity.value >= level.value:
@@ -496,6 +510,8 @@ class Solver:
 		lowest_score = None
 		for guess_idx, guess in enumerate(guesses):
 
+			self.print_progress('%i/%i %s' % (guess_idx + 1, len(guesses), guess.upper()))
+
 			if (guess_idx + 1) % 200 == 0:
 				self.dprint('%i/%i...' % (guess_idx + 1, len(guesses)))
 
@@ -510,13 +526,16 @@ class Solver:
 					is_possible_solution=is_possible_solution)
 
 			if (not limited_solutions_to_check_possible) and (max_words_remaining == 1):
+
 				if is_possible_solution:
 					# Can't possibly do any better than this, so don't bother processing any further
-					self.dprint('%i/%i %s: Optimal guess; not searching any further' % (
-						guess_idx + 1, len(guesses), guess.upper()))
-					best_guess = guess
-					lowest_score = score
-					break
+
+					if DEBUG_DONT_EXIT_ON_OPTIMAL_GUESS:
+						self.print('%i/%i %s: Optimal guess; would stop searching but DEBUG_DONT_EXIT_ON_OPTIMAL_GUESS is set' % (guess_idx + 1, len(guesses), guess.upper()))
+					else:
+						self.print('%i/%i %s: Optimal guess; not searching any further' % (guess_idx + 1, len(guesses), guess.upper()))
+						return guess, score
+
 				else:
 					pass  # TODO: can eliminate all remaining guesses that aren't possible solutions here
 
@@ -553,6 +572,8 @@ class Solver:
 					guess.upper(), max_words_remaining, score, lowest_score
 				))
 
+		self.print_progress_complete()
+
 		return best_guess, lowest_score
 
 	def _solve_recursive(self) -> str:
@@ -562,8 +583,15 @@ class Solver:
 		solutions_sorted = sorted(list(self.possible_solutions))
 		num_possible_solutions = len(solutions_sorted)
 
-		self.print(f'Checking against {num_possible_solutions} solutions, recursively...')
+		# FIXME: this is duplicate logic with _determine_guesses_for_recursive_solving
+		num_guesses_to_check = num_possible_solutions + min(
+			num_possible_solutions,
+			max(self.params.recursion_pad_num_guesses - num_possible_solutions, 0)
+		)
+		self.print(f'Checking {num_guesses_to_check} guesses against {num_possible_solutions} solutions, recursively...')
+
 		best_guess, best_score = self._solve_recursive_inner(possible_solutions=solutions_sorted, recursive_depth=0)
+		self.print_progress_complete()
 
 		if best_guess is None:
 			self.dprint()
@@ -645,6 +673,7 @@ class Solver:
 
 			if recursive_depth == 0:
 				log('')
+				self.print_progress('%i/%i %s' % (guess_idx + 1, len(guesses_to_try), guess.upper()))
 
 			# Limit depth - if minimax, no point searching any deeper than current minimax
 
@@ -787,16 +816,20 @@ class Solver:
 
 			if worst_solution_score == 1:
 				if DEBUG_DONT_EXIT_ON_OPTIMAL_GUESS:
-					log(
-						'Guess %i, option %i/%i %s: This guess is optimal, would stop searching but DEBUG_DONT_EXIT_ON_OPTIMAL_GUESS is set' % (
-							recursive_depth + 1, guess_idx + 1, len(guesses_to_try), guess.upper()
+					log('Guess %i, option %i/%i %s: This guess is optimal, would stop searching but DEBUG_DONT_EXIT_ON_OPTIMAL_GUESS is set' % (
+						recursive_depth + 1, guess_idx + 1, len(guesses_to_try), guess.upper()
 					))
 				else:
-					log(
-						'Guess %i, option %i/%i %s: This guess is optimal, not searching any further' % (
+					if recursive_depth == 0:
+						self.print('%i/%i %s: This guess is optimal (guaranteed to solve in 1 more), not searching any further' % (
+							guess_idx + 1, len(guesses_to_try), guess.upper()
+						))
+					else:
+						log('Guess %i, option %i/%i %s: This guess is optimal, not searching any further' % (
 							recursive_depth + 1, guess_idx + 1, len(guesses_to_try), guess.upper()
-					))
-					break
+						))
+
+					return best_guess, best_guess_score
 
 		return best_guess, best_guess_score
 

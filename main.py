@@ -432,8 +432,7 @@ def benchmark(args, a_b_test: bool, num_benchmark=50):
 		print('           ' + ''.join(['   %-15s' % test.name for test in a_b_tests]))
 		print('   Solution' + ('   Guesses    Time' * len(a_b_tests)))
 	else:
-		print('   Solution   Guesses    Time'
-)
+		print('   Solution   Guesses    Time')
 	print()
 
 	for solution_idx in range(num_benchmark):
