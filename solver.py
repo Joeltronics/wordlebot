@@ -92,9 +92,9 @@ class Solver:
 
 	def print_progress(self, s):
 		if self.one_line_print:
+			# TODO: check if this get_terminal_size call is slowing things down
 			width = os.get_terminal_size().columns
-			print(' ' * (width - 1), end='\r', flush=False)
-			print(s, end='\r', flush=True)
+			print((' ' * (width - 1)) + '\r' + s, end='\r', flush=True)
 
 	def print_progress_complete(self):
 		if self.one_line_print:
@@ -174,7 +174,7 @@ class Solver:
 	def get_most_common_unsolved_letters(self):
 		return self.get_unsolved_letters_counter().most_common()
 
-	def _solutions_remaining(self, guess: str, possible_solution: str, solutions: Iterable[str]) -> List[str]:
+	def _solutions_remaining(self, guess: str, possible_solution: str, solutions: Iterable[str], return_character_status=False) -> List[str]:
 		"""
 		If we guess this word, and see this result, figure out which words remain
 		"""
@@ -183,7 +183,11 @@ class Solver:
 		# TODO: we only need the list length; it may be faster just to instead use:
 		#new_possible_solutions = sum([self._is_valid_for_guess(word, (guess, character_status)) for word in solutions])
 		new_possible_solutions = [word for word in solutions if self._is_valid_for_guess(word, (guess, character_status))]
-		return new_possible_solutions
+
+		if return_character_status:
+			return new_possible_solutions, character_status
+		else:
+			return new_possible_solutions
 
 	def _num_solutions_remaining(self, guess: str, possible_solution: str, solutions: Iterable[str]) -> int:
 		"""
@@ -599,7 +603,10 @@ class Solver:
 			return None
 
 		self.dprint()
-		self.print(f'Best guess {best_guess.upper()} (worst case: solve in {best_score} more guesses after this one)')
+		if best_score == 1:
+			self.print(f'Best guess {best_guess.upper()} (worst case: solve in {best_score} more guess after this one)')
+		else:
+			self.print(f'Best guess {best_guess.upper()} (worst case: solve in {best_score} more guesses after this one)')
 		return best_guess
 
 	def _determine_guesses_for_recursive_solving(
@@ -648,6 +655,7 @@ class Solver:
 			possible_solutions: Iterable[str],
 			recursive_depth: int,
 			recursion_depth_limit: int = RECURSION_HARD_LIMIT,
+			recursive_log_str: str = ''
 	) -> Tuple[str, float]:
 
 		assert recursive_depth < RECURSION_HARD_LIMIT
@@ -673,7 +681,9 @@ class Solver:
 
 			if recursive_depth == 0:
 				log('')
-				self.print_progress('%i/%i %s' % (guess_idx + 1, len(guesses_to_try), guess.upper()))
+				#self.print_progress('%i/%i %s' % (guess_idx + 1, len(guesses_to_try), guess.upper()))
+				recursive_log_str = '%i/%i %s:' % (guess_idx + 1, len(guesses_to_try), guess.upper())
+				self.print_progress(recursive_log_str)
 
 			# Limit depth - if minimax, no point searching any deeper than current minimax
 
@@ -704,11 +714,18 @@ class Solver:
 
 				len_at_start_of_loop = len(remaining_possible_solutions)
 
-				possible_solutions_this_guess = self._solutions_remaining(
+				possible_solutions_this_guess, character_status = self._solutions_remaining(
 					guess=guess,
 					possible_solution=remaining_possible_solutions[0],
 					solutions=possible_solutions,
+					return_character_status=True,
 				)
+
+				if self.one_line_print:
+					this_recursive_log_str = recursive_log_str + ' ' + format_guess(guess, character_status)
+					self.print_progress(this_recursive_log_str)
+				else:
+					this_recursive_log_str = ''
 
 				assert len(possible_solutions_this_guess) > 0
 
@@ -760,6 +777,7 @@ class Solver:
 							possible_solutions=possible_solutions_this_guess,
 							recursive_depth=next_recursive_depth,
 							recursion_depth_limit=this_recursion_depth_limit,
+							recursive_log_str=this_recursive_log_str,
 						)
 
 						if this_level_best_guess is None:

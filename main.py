@@ -19,11 +19,6 @@ import word_list
 import user_input
 
 
-FORMAT_UNKOWN = Back.BLACK + Fore.WHITE
-FORMAT_CORRECT = Back.GREEN + Fore.WHITE
-FORMAT_WRONG_POSITION = Back.YELLOW + Fore.WHITE
-FORMAT_NOT_IN_SOLUTION = Back.WHITE + Fore.BLACK
-
 DEFAULT_NUM_BENCHMARK = 50
 
 
@@ -70,15 +65,6 @@ def parse_args():
 	return args
 
 
-def get_format(char_status: CharStatus) -> str:
-	return {
-		CharStatus.unknown:         FORMAT_UNKOWN,
-		CharStatus.not_in_solution: FORMAT_NOT_IN_SOLUTION,
-		CharStatus.wrong_position:  FORMAT_WRONG_POSITION,
-		CharStatus.correct:         FORMAT_CORRECT,
-	}[char_status]
-
-
 def get_format_for_num_guesses(num_guesses: int) -> str:
 	if num_guesses < 1:
 		raise ValueError('num_guesses must be >= 1')
@@ -94,13 +80,6 @@ def get_format_for_num_guesses(num_guesses: int) -> str:
 		Back.RESET + Fore.RED,    # 6
 		Back.RED + Fore.WHITE,    # >= 7
 	][min(num_guesses - 1, 6)]
-
-
-
-def format_guess(guess: str, statuses: Iterable[CharStatus]) -> str:
-	return ''.join([
-		get_format(status) + character.upper() for character, status in zip(guess, statuses)
-	]) + Style.RESET_ALL
 
 
 class LetterStatus:
