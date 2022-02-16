@@ -402,18 +402,18 @@ def benchmark(args, a_b_test: bool, num_benchmark=50):
 			#ABTestInstance(name='Complexity 100,000', solver_args=dict(complexity_limit=100000)),
 
 			#ABTestInstance(name='Letters only', solver_args=dict(complexity_limit=1, valid_solutions=word_list.words, params=make_solver_params(args, recursion_max_solutions=0))),
-			ABTestInstance(name='Heuristic', solver_args=dict(valid_solutions=word_list.words, params=make_solver_params(args, recursion_max_solutions=0))),
-			ABTestInstance(name='Recursive', solver_args=dict(valid_solutions=word_list.solutions, params=make_solver_params(args))),
+			ABTestInstance(name='Heuristic', solver_args=dict(params=make_solver_params(args, recursion_max_solutions=0))),
+			ABTestInstance(name='Recursive', solver_args=dict(params=make_solver_params(args))),
 
-			#ABTestInstance(name='Rec. minimax', solver_args=dict(valid_solutions=word_list.solutions, params=make_solver_params(args, recursive_minimax_depth=0))),
-			#ABTestInstance(name='Rec. average', solver_args=dict(valid_solutions=word_list.solutions, params=make_solver_params(args, recursive_minimax_depth=99))),
+			#ABTestInstance(name='Rec. minimax', solver_args=dict(params=make_solver_params(args, recursive_minimax_depth=0))),
+			#ABTestInstance(name='Rec. average', solver_args=dict(params=make_solver_params(args, recursive_minimax_depth=99))),
 
-			#ABTestInstance(name='Rec. mmd 0', solver_args=dict(valid_solutions=word_list.solutions, params=make_solver_params(args, recursive_minimax_depth=0))),
-			#ABTestInstance(name='Rec. mmd 1', solver_args=dict(valid_solutions=word_list.solutions, params=make_solver_params(args, recursive_minimax_depth=1))),
-			#ABTestInstance(name='Rec. mmd 2', solver_args=dict(valid_solutions=word_list.solutions, params=make_solver_params(args, recursive_minimax_depth=2))),
-			#ABTestInstance(name='Rec. mmd 3', solver_args=dict(valid_solutions=word_list.solutions, params=make_solver_params(args, recursive_minimax_depth=3))),
-			#ABTestInstance(name='Rec. mmd 4', solver_args=dict(valid_solutions=word_list.solutions, params=make_solver_params(args, recursive_minimax_depth=4))),
-			#ABTestInstance(name='Rec. mmd 99', solver_args=dict(valid_solutions=word_list.solutions, params=make_solver_params(args, recursive_minimax_depth=99))),
+			#ABTestInstance(name='Rec. mmd 0', solver_args=dict(params=make_solver_params(args, recursive_minimax_depth=0))),
+			#ABTestInstance(name='Rec. mmd 1', solver_args=dict(params=make_solver_params(args, recursive_minimax_depth=1))),
+			#ABTestInstance(name='Rec. mmd 2', solver_args=dict(params=make_solver_params(args, recursive_minimax_depth=2))),
+			#ABTestInstance(name='Rec. mmd 3', solver_args=dict(params=make_solver_params(args, recursive_minimax_depth=3))),
+			#ABTestInstance(name='Rec. mmd 4', solver_args=dict(params=make_solver_params(args, recursive_minimax_depth=4))),
+			#ABTestInstance(name='Rec. mmd 99', solver_args=dict(params=make_solver_params(args, recursive_minimax_depth=99))),
 		]
 	else:
 		a_b_tests = [
