@@ -19,20 +19,30 @@ This has an O(n^3) complexity, so when there are still many possible solutions r
 The main pruning is the list of possible guesses, based on which use the most common remaining letters.
 When the search space is very large, we also prune the list of possible solutions to check these guesses against.
 
-When there are fewer guesses than a certain limit, search recursively for which guess will take the fewest remaining guesses to solve (using minimax).
+When there are fewer guesses than a certain limit, search recursively for which guess will take the fewest remaining guesses to solve (using a combination of average & minimax - more on this later).
 
 ## How could it be improved?
 
 #### Recursive algorithm improvements
 
-The recursive algorithm only uses minimax at the moment.
-This is because it's very easy to limit the recursion depth - there's no point ever searching deeper than your current best.
-However, it would be worth exploring better metrics such as mean or least-squares (there are still ways of limiting depth with these, they're just not as simple). 
-Minimax should be better at optimizing for win percentage, but not for trying to solve in the fewest guesses.
+The recursive algorithm has 2 different ways of calculating score: average, or minimax.
 
-Similarly, recursive & heuristic don't need to be mutually exclusive, as they are right now.
+Average is better for optimizing for solving in the fewest guesses, while minimax is better at ensuring a puzzle can be solved within 6 guesses (though averaging is good enough that this isn't really a problem).
+
+Averaging gives very slightly better results.
+The problem is that minimax can trivially limit the recursion depth (and thus the processing time), as there's no point ever searching deeper than your current best guess; averaging cannot limit recursion depth as easily, so it can be extremely slow in some cases.
+There are still ways the depth could be limited with averaging, but these aren't currently implemented.
+
+Currently, the solver uses averaging at the outermost level, and switches to minimax at deeper recursion depths.
+However, this has a big flaw - it treats minimax and average numbers as equivalent, and sums them together.
+This isn't horrible (it still performs better than just minimax), but it's not great either. 
+There's a FIXME to deal with this.
+
+Also, recursive & heuristic don't need to be mutually exclusive, as they are right now.
 For example, we could search 1 or 2 levels recursively, and then use heuristics on the next level after that.
 I suspect this would work quite well, and I would like to explore this in the future.
+
+The mix of solution and non-solution guesses to try with the recursive algorithm could also be improved.
 
 #### Non-recursive algorithm improvements
 
@@ -40,6 +50,7 @@ We exit the loop early after finding a "perfect" guess - no point in keeping sea
 However, in order to be perfect, it has to be a possible solution.
 If we find a non-solution but otherwise perfect guess, the only guess that could beat it is a perfect solution.
 That means, after finding such a guess, we could reduce the search space to only possible solutions.
+This improvement wouldn't affect the solving ability, but could improve its speed. 
 
 #### Pruning improvements
 

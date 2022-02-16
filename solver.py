@@ -30,8 +30,8 @@ class SolverParams:
 	recursion_max_solutions: int = 12
 	# Non-solution guesses may be added to pad guess list, up to this many total guesses
 	recursion_pad_num_guesses: int = 20
-
-	recursive_minimax: bool = True
+	# At this recursion depth, switch from average to minimax
+	recursive_minimax_depth: int = 1
 
 	# "Best solution" score weights
 
@@ -555,7 +555,7 @@ class Solver:
 
 		return best_guess, lowest_score
 
-	def _solve_recursive(self, minimax: bool) -> str:
+	def _solve_recursive(self) -> str:
 
 		# TODO: find a way to limit complexity to get consistent time performance out of this
 
@@ -563,7 +563,7 @@ class Solver:
 		num_possible_solutions = len(solutions_sorted)
 
 		self.print(f'Checking against {num_possible_solutions} solutions, recursively...')
-		best_guess, best_score = self._solve_recursive_inner(possible_solutions=solutions_sorted, recursive_depth=0, minimax=minimax)
+		best_guess, best_score = self._solve_recursive_inner(possible_solutions=solutions_sorted, recursive_depth=0)
 
 		if best_guess is None:
 			self.dprint()
@@ -619,11 +619,13 @@ class Solver:
 			self,
 			possible_solutions: Iterable[str],
 			recursive_depth: int,
-			minimax: bool = True,
 			recursion_depth_limit: int = RECURSION_HARD_LIMIT,
 	) -> Tuple[str, float]:
 
 		assert recursive_depth < RECURSION_HARD_LIMIT
+
+		# FIXME: right now we treat minimax and average scores as equivalent and just sum them, this is wrong
+		minimax = recursive_depth >= self.params.recursive_minimax_depth
 
 		# TODO: Add another depth limit, which switches to heuristics instead of giving up
 
@@ -729,7 +731,6 @@ class Solver:
 							possible_solutions=possible_solutions_this_guess,
 							recursive_depth=next_recursive_depth,
 							recursion_depth_limit=this_recursion_depth_limit,
-							minimax=minimax,
 						)
 
 						if this_level_best_guess is None:
@@ -822,7 +823,7 @@ class Solver:
 		elif num_possible_solutions <= self.params.recursion_max_solutions:
 			# Search based on fewest number of guesses needed to solve puzzle
 			# This makes the search space massive, which is why we only do it when few remaining solutions
-			guess = self._solve_recursive(minimax=self.params.recursive_minimax)
+			guess = self._solve_recursive()
 
 			if guess is not None:
 				return guess

@@ -48,7 +48,7 @@ def parse_args():
 		'-r', metavar='SOLUTIONS', dest='recursion', type=int, default=default_params.recursion_max_solutions,
 		help=f'Use recursive lookahead when this many or fewer solutions remain, default {default_params.recursion_max_solutions}')
 	group.add_argument('--agnostic', action='store_true', help='Make solver unaware of limited set of possible solutions')
-	group.add_argument('--average', dest='recursive_minimax', action='store_false', help='Recursive solver solves for average instead of minimax')
+	group.add_argument('--mmd', dest='recursive_minimax_depth', type=int, default=default_params.recursive_minimax_depth, help='At this recursion depth, switch from average to minimax; 0 for all minimax, large number for all average')
 
 	group = parser.add_argument_group('Benchmarking & A/B testing')
 	group.add_argument(
@@ -370,11 +370,11 @@ class ABTestInstance:
 			self.num_solved += 1
 
 
-def make_solver_params(args, recursion_max_solutions=None, recursive_minimax=None) -> SolverParams:
+def make_solver_params(args, recursion_max_solutions=None, recursive_minimax_depth=None) -> SolverParams:
 
 	return SolverParams(
 		recursion_max_solutions=(recursion_max_solutions if recursion_max_solutions is not None else args.recursion),
-		recursive_minimax=(recursive_minimax if (recursive_minimax is not None) else args.recursive_minimax)
+		recursive_minimax_depth=(recursive_minimax_depth if (recursive_minimax_depth is not None) else args.recursive_minimax_depth)
 	)
 
 
@@ -405,8 +405,15 @@ def benchmark(args, a_b_test: bool, num_benchmark=50):
 			ABTestInstance(name='Heuristic', solver_args=dict(valid_solutions=word_list.words, params=make_solver_params(args, recursion_max_solutions=0))),
 			ABTestInstance(name='Recursive', solver_args=dict(valid_solutions=word_list.solutions, params=make_solver_params(args))),
 
-			#ABTestInstance(name='Recursive minimax', solver_args=dict(valid_solutions=word_list.solutions, params=make_solver_params(args, recursive_minimax=True))),
-			#ABTestInstance(name='Recursive average', solver_args=dict(valid_solutions=word_list.solutions, params=make_solver_params(args, recursive_minimax=False))),
+			#ABTestInstance(name='Rec. minimax', solver_args=dict(valid_solutions=word_list.solutions, params=make_solver_params(args, recursive_minimax_depth=0))),
+			#ABTestInstance(name='Rec. average', solver_args=dict(valid_solutions=word_list.solutions, params=make_solver_params(args, recursive_minimax_depth=99))),
+
+			#ABTestInstance(name='Rec. mmd 0', solver_args=dict(valid_solutions=word_list.solutions, params=make_solver_params(args, recursive_minimax_depth=0))),
+			#ABTestInstance(name='Rec. mmd 1', solver_args=dict(valid_solutions=word_list.solutions, params=make_solver_params(args, recursive_minimax_depth=1))),
+			#ABTestInstance(name='Rec. mmd 2', solver_args=dict(valid_solutions=word_list.solutions, params=make_solver_params(args, recursive_minimax_depth=2))),
+			#ABTestInstance(name='Rec. mmd 3', solver_args=dict(valid_solutions=word_list.solutions, params=make_solver_params(args, recursive_minimax_depth=3))),
+			#ABTestInstance(name='Rec. mmd 4', solver_args=dict(valid_solutions=word_list.solutions, params=make_solver_params(args, recursive_minimax_depth=4))),
+			#ABTestInstance(name='Rec. mmd 99', solver_args=dict(valid_solutions=word_list.solutions, params=make_solver_params(args, recursive_minimax_depth=99))),
 		]
 	else:
 		a_b_tests = [
