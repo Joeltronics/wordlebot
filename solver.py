@@ -7,9 +7,10 @@ from enum import Enum, unique
 from math import sqrt
 import os
 import sys
-from typing import Tuple, Iterable, Optional, Union
+from typing import Tuple, Iterable, Optional, Union, List
 
 from game_types import *
+import matching
 
 
 RECURSION_HARD_LIMIT = 5
@@ -116,14 +117,9 @@ class Solver:
 	def get_possible_solitions(self) -> List[str]:
 		return self.possible_solutions
 
-	def _is_valid_for_guess(self, word: str, guess: Tuple[str, Iterable[CharStatus]]) -> bool:
-		guess_word, guess_char_statuses = guess
-		status_if_this_is_solution = get_character_statuses(guess=guess_word, solution=word)
-		return status_if_this_is_solution == guess_char_statuses
-
 	def _is_valid(self, word: str) -> bool:
 		return all([
-			self._is_valid_for_guess(word, guess) for guess in self.guesses
+			matching.is_valid_for_guess(word, guess) for guess in self.guesses
 		])
 
 	def add_guess(self, guess_word: str, character_statuses: Iterable[CharStatus]):
@@ -131,7 +127,7 @@ class Solver:
 		this_guess = (guess_word, character_statuses)
 		self.guesses.append(this_guess)
 
-		self.possible_solutions = {word for word in self.possible_solutions if self._is_valid_for_guess(word, this_guess)}
+		self.possible_solutions = {word for word in self.possible_solutions if matching.is_valid_for_guess(word, this_guess)}
 		assert len(self.possible_solutions) > 0
 
 		# TODO: in theory, could use process of elimination to sometimes guarantee position from yellow letters
@@ -173,27 +169,6 @@ class Solver:
 
 	def get_most_common_unsolved_letters(self):
 		return self.get_unsolved_letters_counter().most_common()
-
-	def _solutions_remaining(self, guess: str, possible_solution: str, solutions: Iterable[str], return_character_status=False) -> List[str]:
-		"""
-		If we guess this word, and see this result, figure out which words remain
-		"""
-		# TODO: this is a bottleneck, see if it can be optimized
-		character_status = get_character_statuses(guess, possible_solution)
-		# TODO: we only need the list length; it may be faster just to instead use:
-		#new_possible_solutions = sum([self._is_valid_for_guess(word, (guess, character_status)) for word in solutions])
-		new_possible_solutions = [word for word in solutions if self._is_valid_for_guess(word, (guess, character_status))]
-
-		if return_character_status:
-			return new_possible_solutions, character_status
-		else:
-			return new_possible_solutions
-
-	def _num_solutions_remaining(self, guess: str, possible_solution: str, solutions: Iterable[str]) -> int:
-		"""
-		If we guess this word, and see this result, figure out how many possible words could be remaining
-		"""
-		return len(self._solutions_remaining(guess=guess, possible_solution=possible_solution, solutions=solutions))
 
 	def _preliminary_score_guesses(
 			self,
@@ -394,7 +369,7 @@ class Solver:
 		The overall algorithm is O(n^3):
 		  1. in _solve_fewest_remaining_words_from_lists(), loop over guesses
 		  2. in _solve_fewest_remaining_words_from_lists(), loop over solutions_to_check_possible
-		  3. in _num_solutions_remaining(), another loop over solutions_to_check_num_remaining
+		  3. in matching.num_solutions_remaining(), another loop over solutions_to_check_num_remaining
 		"""
 
 		# Figure out how much to prune
@@ -465,8 +440,8 @@ class Solver:
 		sum_words_remaining = 0
 		sum_squared = 0
 		for possible_solution in solutions_to_check_possible:
-			words_remaining = self._num_solutions_remaining(guess, possible_solution,
-															solutions=solutions_to_check_num_remaining)
+			words_remaining = matching.num_solutions_remaining(
+				guess, possible_solution, solutions=solutions_to_check_num_remaining)
 			sum_words_remaining += words_remaining
 			sum_squared += (words_remaining ** 2)
 			max_words_remaining = max(words_remaining, max_words_remaining) if (
@@ -714,7 +689,7 @@ class Solver:
 
 				len_at_start_of_loop = len(remaining_possible_solutions)
 
-				possible_solutions_this_guess, character_status = self._solutions_remaining(
+				possible_solutions_this_guess, character_status = matching.solutions_remaining(
 					guess=guess,
 					possible_solution=remaining_possible_solutions[0],
 					solutions=possible_solutions,

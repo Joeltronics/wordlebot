@@ -14,6 +14,7 @@ from typing import Iterable, Optional
 import random
 
 from game_types import *
+import matching
 from solver import Solver, SolverVerbosity, SolverParams
 import word_list
 import user_input
@@ -262,14 +263,14 @@ def play_game(solution, solver: Solver, auto_solve: bool, endless=False, silent=
 			guess = user_input.ask_word(guess_num)
 
 		guesses.append(guess)
-		statuses = get_character_statuses(guess=guess, solution=solution)
+		statuses = matching.get_character_statuses(guess=guess, solution=solution)
 
 		letter_status.add_guess(guess, statuses)
 		solver.add_guess(guess, statuses)
 
 		game_print()
 		for n, this_guess in enumerate(guesses):
-			statuses = get_character_statuses(guess=this_guess, solution=solution)
+			statuses = matching.get_character_statuses(guess=this_guess, solution=solution)
 			game_print('%i: %s' % (n + 1, format_guess(this_guess, statuses)))
 		game_print()
 		
