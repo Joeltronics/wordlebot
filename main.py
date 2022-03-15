@@ -102,8 +102,8 @@ class LetterStatus:
 		for row in rows:
 			print(''.join([self._format_char(ch) for ch in row]) + Style.RESET_ALL)
 
-	def add_guess(self, guess, statuses):
-		for character, status in zip(guess.lower(), statuses):
+	def add_guess(self, guess: Word, statuses):
+		for character, status in zip(guess.word.lower(), statuses):
 			if self.char_status[character].value < status.value:
 				self.char_status[character] = status
 
@@ -130,7 +130,7 @@ class DeterministicPseudorandom:
 			return self.state
 
 
-def pick_solution(args, deterministic_idx: Optional[int] = None, do_print=True):
+def pick_solution(args, deterministic_idx: Optional[int] = None, do_print=True) -> Word:
 
 	if do_print:
 		print('%u total allowed words, %u possible solutions' % (len(word_list.words), len(word_list.solutions)))
@@ -148,8 +148,10 @@ def pick_solution(args, deterministic_idx: Optional[int] = None, do_print=True):
 		elif (solution not in word_list.solutions) and not args.all_words:
 			print('WARNING: "%s" is an accepted word, but not in solutions list; proceeding with game anyway' % solution.upper())
 			print()
+		
+		solution = Word(solution)
 
-		print('Solution given: %s' % solution.upper())
+		print('Solution given: %s' % solution)
 
 	else:
 
@@ -165,15 +167,15 @@ def pick_solution(args, deterministic_idx: Optional[int] = None, do_print=True):
 
 		if args.solve:
 			print()
-			print('Using auto solve, so showing solution: %s' % solution.upper())
+			print('Using auto solve, so showing solution: %s' % solution)
 		elif args.cheat:
 			print()
-			print('CHEAT MODE: solution is %s' % solution.upper())
+			print('CHEAT MODE: solution is %s' % solution)
 
 	return solution
 
 
-def play_game(solution, solver: Solver, auto_solve: bool, endless=False, silent=False, specified_guesses=None) -> int:
+def play_game(solution: Word, solver: Solver, auto_solve: bool, endless=False, silent=False, specified_guesses=None) -> int:
 	"""
 	:returns: Number of guesses game was solved in
 	"""
@@ -222,16 +224,16 @@ def play_game(solution, solver: Solver, auto_solve: bool, endless=False, silent=
 				for tens in range(len(solutions) // 10 + 1):
 					idx_start = tens * 10
 					idx_end = min(idx_start + 10, len(solutions))
-					game_print('  ' + ', '.join([solution.upper() for solution in solutions[idx_start:idx_end]]))
+					game_print('  ' + ', '.join([str(solution) for solution in solutions[idx_start:idx_end]]))
 
 			elif num_possible_solutions > 1:
 				# 2-10
-				solutions = sorted([solution.upper() for solution in solver.get_possible_solitions()])
-				game_print('%i possible solutions: %s' % (num_possible_solutions, ', '.join(solutions)))
+				solutions = sorted([solution for solution in solver.get_possible_solitions()])
+				game_print('%i possible solutions: %s' % (num_possible_solutions, ', '.join([str(s) for s in solutions])))
 
 			else:
 				# 1
-				game_print('Only 1 possible solution: %s' % tuple(solver.get_possible_solitions())[0].upper())
+				game_print('Only 1 possible solution: %s' % tuple(solver.get_possible_solitions())[0])
 
 			if num_possible_solutions > 2:
 
@@ -253,14 +255,16 @@ def play_game(solution, solver: Solver, auto_solve: bool, endless=False, silent=
 			solver_guess = solver.get_best_guess()
 
 		if specified_guess:
-			game_print('Using specified guess: %s' % specified_guess.upper())
+			game_print('Using specified guess: %s' % specified_guess)
 			guess = specified_guess
 		elif auto_solve and (solver_guess is not None):
-			game_print('Using guess from solver: %s' % solver_guess.upper())
+			game_print('Using guess from solver: %s' % solver_guess)
 			guess = solver_guess
 		else:
-			game_print('Solver best guess is %s' % solver_guess.upper())
+			game_print('Solver best guess is %s' % solver_guess)
 			guess = user_input.ask_word(guess_num)
+
+		guess = Word(guess)
 
 		guesses.append(guess)
 		statuses = matching.get_character_statuses(guess=guess, solution=solution)
@@ -282,7 +286,7 @@ def play_game(solution, solver: Solver, auto_solve: bool, endless=False, silent=
 			game_print('Playing in endless mode - continuing after 6 guesses')
 			game_print()
 		elif guess_num >= 6 and not endless:
-			game_print('Failed, the solution was %s' % solution.upper())
+			game_print('Failed, the solution was %s' % solution)
 			return 0
 
 
@@ -421,7 +425,7 @@ def benchmark(args, a_b_test: bool, num_benchmark=50):
 
 		results_per_solver = []
 
-		print('%-4i %5s' % (solution_idx + 1, solution.upper()), end='', flush=True)
+		print('%-4i %5s' % (solution_idx + 1, solution), end='', flush=True)
 
 		for a_b_test in a_b_tests:
 			this_solver_args = copy(default_solver_args)

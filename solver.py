@@ -74,8 +74,8 @@ def clip(value, range):
 class Solver:
 	def __init__(
 			self,
-			valid_solutions: Iterable[str],
-			allowed_words: Iterable[str],
+			valid_solutions: Iterable[Word],
+			allowed_words: Iterable[Word],
 			complexity_limit: int,
 			params=SolverParams(),
 			verbosity=SolverVerbosity.regular):
@@ -122,7 +122,7 @@ class Solver:
 			matching.is_valid_for_guess(word, guess) for guess in self.guesses
 		])
 
-	def add_guess(self, guess_word: str, character_statuses: Iterable[CharStatus]):
+	def add_guess(self, guess_word: Word, character_statuses: Iterable[CharStatus]):
 
 		this_guess = (guess_word, character_statuses)
 		self.guesses.append(this_guess)
@@ -135,14 +135,14 @@ class Solver:
 		# However, I suspect this is unlikely to actually make much of a difference in practice
 		for idx in range(5):
 			if character_statuses[idx] == CharStatus.correct:
-				self.solved_letters[idx] = guess_word[idx]
+				self.solved_letters[idx] = guess_word.word[idx]
 
 	def get_unsolved_letters_counter(self, possible_solutions: Optional[list[str]] = None, per_position=False):
 
 		def _remove_solved_letters(word):
 			return ''.join([
 				letter if (solved_letter is None or letter != solved_letter) else ''
-				for letter, solved_letter in zip(word, self.solved_letters)
+				for letter, solved_letter in zip(word.word, self.solved_letters)
 			])
 
 		if possible_solutions is None:
@@ -162,7 +162,7 @@ class Solver:
 				continue
 
 			position_counters[position_idx] = collections.Counter([
-				word[position_idx] for word in possible_solutions
+				word.word[position_idx] for word in possible_solutions
 			])
 
 		return counter, position_counters
@@ -188,13 +188,13 @@ class Solver:
 				score_unique_letters = sum([
 					counter_overall[unique_letter]
 					for unique_letter
-					in set(word)
+					in set(word.word)
 				])
 
 				score_positional = sum([
 					counter[letter]
 					for letter, counter
-					in zip(word, counters_per_position)
+					in zip(word.word, counters_per_position)
 					if counter is not None
 				])
 
@@ -217,18 +217,18 @@ class Solver:
 			if len(guesses) > 10:
 				self.print_level(SolverVerbosity.debug, 'Best guesses:')
 				for guess, score in guesses[:5]:
-					self.print_level(SolverVerbosity.debug, '  %s %.2f' % (guess.upper(), score / num_solutions))
+					self.print_level(SolverVerbosity.debug, '  %s %.2f' % (guess, score / num_solutions))
 				for guess, score in guesses[5:10]:
-					self.print_level(SolverVerbosity.verbose_debug, '  %s %.2f' % (guess.upper(), score / num_solutions))
+					self.print_level(SolverVerbosity.verbose_debug, '  %s %.2f' % (guess, score / num_solutions))
 
 				self.print_level(SolverVerbosity.verbose_debug,'Worst guesses:')
 				for guess, score in guesses[-10:]:
-					self.print_level(SolverVerbosity.verbose_debug,'  %s %.2f' % (guess.upper(), score / num_solutions))
+					self.print_level(SolverVerbosity.verbose_debug,'  %s %.2f' % (guess, score / num_solutions))
 
 			else:
 				self.print_level('All guesses:')
 				for guess, score in guesses:
-					self.print_level(SolverVerbosity.debug,'  %s %.2f' % (guess.upper(), score / num_solutions))
+					self.print_level(SolverVerbosity.debug,'  %s %.2f' % (guess, score / num_solutions))
 
 		return guesses
 
@@ -414,7 +414,7 @@ class Solver:
 		self.print()
 		self._log_pruning(num_guesses_to_try, divide_solutions_to_check_possible, divide_solutions_to_check_num_remaining)
 
-		self.dprint('Initial best candidates: ' + ' '.join([guess.upper() for guess in (
+		self.dprint('Initial best candidates: ' + ' '.join([str(guess) for guess in (
 			guesses_to_try[:5] if len(guesses_to_try) > 5 else guesses_to_try
 		)]))
 
@@ -466,9 +466,9 @@ class Solver:
 
 	def _solve_fewest_remaining_words_from_lists(
 			self,
-			guesses: Iterable[str],
-			solutions_to_check_possible: Iterable[str] = None,
-			solutions_to_check_num_remaining: Iterable[str] = None,
+			guesses: Iterable[Word],
+			solutions_to_check_possible: Iterable[Word] = None,
+			solutions_to_check_num_remaining: Iterable[Word] = None,
 			) -> Tuple[str, float]:
 
 		if solutions_to_check_possible is None:
@@ -489,7 +489,7 @@ class Solver:
 		lowest_score = None
 		for guess_idx, guess in enumerate(guesses):
 
-			self.print_progress('%i/%i %s' % (guess_idx + 1, len(guesses), guess.upper()))
+			self.print_progress('%i/%i %s' % (guess_idx + 1, len(guesses), guess))
 
 			if (guess_idx + 1) % 200 == 0:
 				self.dprint('%i/%i...' % (guess_idx + 1, len(guesses)))
@@ -510,9 +510,9 @@ class Solver:
 					# Can't possibly do any better than this, so don't bother processing any further
 
 					if DEBUG_DONT_EXIT_ON_OPTIMAL_GUESS:
-						self.print('%i/%i %s: Optimal guess; would stop searching but DEBUG_DONT_EXIT_ON_OPTIMAL_GUESS is set' % (guess_idx + 1, len(guesses), guess.upper()))
+						self.print('%i/%i %s: Optimal guess; would stop searching but DEBUG_DONT_EXIT_ON_OPTIMAL_GUESS is set' % (guess_idx + 1, len(guesses), guess))
 					else:
-						self.print('%i/%i %s: Optimal guess; not searching any further' % (guess_idx + 1, len(guesses), guess.upper()))
+						self.print('%i/%i %s: Optimal guess; not searching any further' % (guess_idx + 1, len(guesses), guess))
 						return guess, score
 
 				else:
@@ -533,7 +533,7 @@ class Solver:
 				lowest_score = score
 				self.dprint('%i/%i %s: Best so far, score %.2f (average %.2f, lowest %.2f / worst case %i, lowest %i)' % (
 					guess_idx + 1, len(guesses),
-					guess.upper(),
+					guess,
 					score,
 					mean_words_remaining, lowest_average,
 					max_words_remaining, lowest_max,
@@ -542,13 +542,13 @@ class Solver:
 			if is_lowest_average and not is_lowest_score:
 				self.dprint('%i/%i %s: New lowest average, but not lowest score: %.2f (score %.2f, best %.2f)' % (
 					guess_idx + 1, len(guesses),
-					guess.upper(), mean_words_remaining, score, lowest_score
+					guess, mean_words_remaining, score, lowest_score
 				))
 
 			if is_lowest_max and not is_lowest_score:
 				self.dprint('%i/%i %s: New lowest max, but not lowest score: %i (score %.2f, best %.2f)' % (
 					guess_idx + 1, len(guesses),
-					guess.upper(), max_words_remaining, score, lowest_score
+					guess, max_words_remaining, score, lowest_score
 				))
 
 		self.print_progress_complete()
@@ -579,9 +579,9 @@ class Solver:
 
 		self.dprint()
 		if best_score == 1:
-			self.print(f'Best guess {best_guess.upper()} (worst case: solve in {best_score} more guess after this one)')
+			self.print(f'Best guess {best_guess} (worst case: solve in {best_score:.2f} more guess after this one)')
 		else:
-			self.print(f'Best guess {best_guess.upper()} (worst case: solve in {best_score} more guesses after this one)')
+			self.print(f'Best guess {best_guess} (worst case: solve in {best_score:.2f} more guesses after this one)')
 		return best_guess
 
 	def _determine_guesses_for_recursive_solving(
@@ -656,8 +656,8 @@ class Solver:
 
 			if recursive_depth == 0:
 				log('')
-				#self.print_progress('%i/%i %s' % (guess_idx + 1, len(guesses_to_try), guess.upper()))
-				recursive_log_str = '%i/%i %s:' % (guess_idx + 1, len(guesses_to_try), guess.upper())
+				#self.print_progress('%i/%i %s' % (guess_idx + 1, len(guesses_to_try), guess))
+				recursive_log_str = '%i/%i %s:' % (guess_idx + 1, len(guesses_to_try), guess)
 				self.print_progress(recursive_log_str)
 
 			# Limit depth - if minimax, no point searching any deeper than current minimax
@@ -669,13 +669,13 @@ class Solver:
 
 			if len(possible_solutions) <= 6:
 				log('Guess %i, option %i/%i %s: checking against %i solutions to a max depth of %i: %s' % (
-					recursive_depth + 1, guess_idx + 1, len(guesses_to_try), guess.upper(), len(possible_solutions),
+					recursive_depth + 1, guess_idx + 1, len(guesses_to_try), guess, len(possible_solutions),
 					this_recursion_depth_limit,
-					' '.join([solution.upper() for solution in possible_solutions])
+					' '.join([str(solution) for solution in possible_solutions])
 				))
 			else:
 				log('Guess %i, option %i/%i %s: checking against %i solutions to a max depth of %i' % (
-					recursive_depth + 1, guess_idx + 1, len(guesses_to_try), guess.upper(), len(possible_solutions),
+					recursive_depth + 1, guess_idx + 1, len(guesses_to_try), guess, len(possible_solutions),
 					this_recursion_depth_limit,
 				))
 
@@ -713,7 +713,7 @@ class Solver:
 					log('  Solution possibility %i/%i %s, would have down to 1 solution, guaranteed 1 more guess' % (
 						total_num_possible_solutions - len_at_start_of_loop + 1,
 						total_num_possible_solutions,
-						possible_solutions_this_guess[0].upper(),
+						possible_solutions_this_guess[0],
 					))
 					this_solution_score = 1
 
@@ -722,8 +722,8 @@ class Solver:
 						total_num_possible_solutions - len_at_start_of_loop + 1,
 						total_num_possible_solutions - len_at_start_of_loop + len(possible_solutions_this_guess),
 						total_num_possible_solutions,
-						possible_solutions_this_guess[0].upper(),
-						possible_solutions_this_guess[1].upper(),
+						possible_solutions_this_guess[0],
+						possible_solutions_this_guess[1],
 					))
 					this_solution_score = 2 if minimax else 1.5
 
@@ -768,7 +768,7 @@ class Solver:
 				curr_sum_average = solution_score_sum / len(possible_solutions)
 				if (best_guess_score is not None) and (not minimax) and (curr_sum_average > best_guess_score):
 					log('  Abandoning this guess - current average sum (%.2f) worse than current best (%s %.2f)' % (
-						curr_sum_average, best_guess.upper(), best_guess_score
+						curr_sum_average, best_guess, best_guess_score
 					))
 					skip_this_guess = True
 					break
@@ -794,15 +794,15 @@ class Solver:
 			if best_guess_score == 1:
 				assert average_score == 1
 				log('Guess %i, option %i/%i %s: Guaranteed to solve in 1 more guess' % (
-					recursive_depth + 1, guess_idx + 1, len(guesses_to_try), guess.upper(),
+					recursive_depth + 1, guess_idx + 1, len(guesses_to_try), guess,
 				))
 			elif minimax:
 				log('Guess %i, option %i/%i %s: Worst case, solve in %i more guesses' % (
-					recursive_depth + 1, guess_idx + 1, len(guesses_to_try), guess.upper(), best_guess_score,
+					recursive_depth + 1, guess_idx + 1, len(guesses_to_try), guess, best_guess_score,
 				))
 			else:
 				log('Guess %i, option %i/%i %s: Average case, solve in %.2f more guesses' % (
-					recursive_depth + 1, guess_idx + 1, len(guesses_to_try), guess.upper(), average_score,
+					recursive_depth + 1, guess_idx + 1, len(guesses_to_try), guess, average_score,
 				))
 
 			assert worst_solution_score >= 1
@@ -810,16 +810,16 @@ class Solver:
 			if worst_solution_score == 1:
 				if DEBUG_DONT_EXIT_ON_OPTIMAL_GUESS:
 					log('Guess %i, option %i/%i %s: This guess is optimal, would stop searching but DEBUG_DONT_EXIT_ON_OPTIMAL_GUESS is set' % (
-						recursive_depth + 1, guess_idx + 1, len(guesses_to_try), guess.upper()
+						recursive_depth + 1, guess_idx + 1, len(guesses_to_try), guess
 					))
 				else:
 					if recursive_depth == 0:
 						self.print('%i/%i %s: This guess is optimal (guaranteed to solve in 1 more), not searching any further' % (
-							guess_idx + 1, len(guesses_to_try), guess.upper()
+							guess_idx + 1, len(guesses_to_try), guess
 						))
 					else:
 						log('Guess %i, option %i/%i %s: This guess is optimal, not searching any further' % (
-							recursive_depth + 1, guess_idx + 1, len(guesses_to_try), guess.upper()
+							recursive_depth + 1, guess_idx + 1, len(guesses_to_try), guess
 						))
 
 					return best_guess, best_guess_score
