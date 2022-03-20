@@ -59,6 +59,15 @@ class Word:
 	def __hash__(self) -> int:
 		return self.index
 
+	def __iter__(self):
+		return self.word.__iter__()
+
+	def __next__(self):
+		return self.word.__next__()
+
+	def __getitem__(self, idx: int):
+		return self.word[idx]
+
 
 def get_format(char_status: CharStatus) -> str:
 	return {
@@ -71,5 +80,5 @@ def get_format(char_status: CharStatus) -> str:
 
 def format_guess(guess: Word, statuses: Iterable[CharStatus]) -> str:
 	return ''.join([
-		get_format(status) + character.upper() for character, status in zip(guess.word, statuses)
+		get_format(status) + character.upper() for character, status in zip(guess, statuses)
 	]) + Style.RESET_ALL

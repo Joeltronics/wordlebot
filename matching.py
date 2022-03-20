@@ -10,22 +10,22 @@ def _calculate_character_statuses(guess: Word, solution: Word) -> tuple[CharStat
 
 	statuses = [None for _ in range(5)]
 
-	unsolved_chars = list(solution.word)
+	unsolved_chars = list(solution)
 
 	# 1st pass: green or definite grey (yellow is more complicated, since there could be multiple of the same letter)
-	for n, character in enumerate(guess.word):
+	for n, character in enumerate(guess):
 
-		if character == solution.word[n]:
+		if character == solution[n]:
 			statuses[n] = CharStatus.correct
 			unsolved_chars[n] = ' '
 
-		elif character not in solution.word:
+		elif character not in solution:
 			statuses[n] = CharStatus.not_in_solution
 
 	# 2nd pass: letters that are in word but in wrong place (not necessarily yellow when multiple of same letter in word)
-	for n, character in enumerate(guess.word):
+	for n, character in enumerate(guess):
 		if statuses[n] is None:
-			assert character in solution.word
+			assert character in solution
 			if character in unsolved_chars:
 				statuses[n] = CharStatus.wrong_position
 				unsolved_char_idx = unsolved_chars.index(character)

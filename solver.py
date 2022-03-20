@@ -135,14 +135,14 @@ class Solver:
 		# However, I suspect this is unlikely to actually make much of a difference in practice
 		for idx in range(5):
 			if character_statuses[idx] == CharStatus.correct:
-				self.solved_letters[idx] = guess_word.word[idx]
+				self.solved_letters[idx] = guess_word[idx]
 
 	def get_unsolved_letters_counter(self, possible_solutions: Optional[list[str]] = None, per_position=False):
 
 		def _remove_solved_letters(word):
 			return ''.join([
 				letter if (solved_letter is None or letter != solved_letter) else ''
-				for letter, solved_letter in zip(word.word, self.solved_letters)
+				for letter, solved_letter in zip(word, self.solved_letters)
 			])
 
 		if possible_solutions is None:
@@ -162,7 +162,7 @@ class Solver:
 				continue
 
 			position_counters[position_idx] = collections.Counter([
-				word.word[position_idx] for word in possible_solutions
+				word[position_idx] for word in possible_solutions
 			])
 
 		return counter, position_counters
@@ -188,13 +188,13 @@ class Solver:
 				score_unique_letters = sum([
 					counter_overall[unique_letter]
 					for unique_letter
-					in set(word.word)
+					in set(word)
 				])
 
 				score_positional = sum([
 					counter[letter]
 					for letter, counter
-					in zip(word.word, counters_per_position)
+					in zip(word, counters_per_position)
 					if counter is not None
 				])
 

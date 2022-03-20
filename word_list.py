@@ -31,7 +31,7 @@ assert _all_unique([item.index for item in words])
 def get_word_from_str(word_str: str) -> Word:
 	word_str = word_str.upper()
 	for word in words:
-		if word.word == word_str:
+		if word == word_str:
 			return word
 	else:
 		raise KeyError(word_str)
