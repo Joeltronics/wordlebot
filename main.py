@@ -103,7 +103,7 @@ class LetterStatus:
 		for row in rows:
 			print(''.join([self._format_char(ch) for ch in row]) + Style.RESET_ALL)
 
-	def add_guess(self, guess: Word, statuses):
+	def add_guess(self, guess: Word, statuses: WordCharStatus):
 		for character, status in zip(guess.word.lower(), statuses):
 			if self.char_status[character].value < status.value:
 				self.char_status[character] = status

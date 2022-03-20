@@ -22,6 +22,51 @@ class CharStatus(Enum):
 	correct = 3
 
 
+assert all([0 <= status.value < 4 for status in CharStatus])
+
+
+@dataclass(frozen=True)
+class WordCharStatus:
+	_status: tuple[CharStatus, CharStatus, CharStatus, CharStatus, CharStatus]
+
+	def as_int(self) -> int:
+		return \
+			(self._status[0].value << 8) | \
+			(self._status[1].value << 6) | \
+			(self._status[2].value << 4) | \
+			(self._status[3].value << 2) | \
+			(self._status[4].value << 0)
+
+	@classmethod
+	def from_int(cls, as_int: int):
+		return WordCharStatus((
+			CharStatus((as_int & 0x300) >> 8),
+			CharStatus((as_int & 0x0C0) >> 6),
+			CharStatus((as_int & 0x030) >> 4),
+			CharStatus((as_int & 0x00C) >> 2),
+			CharStatus(as_int & 0x003),
+		))
+
+	def __getitem__(self, idx: int):
+		return self._status[idx]
+
+	def __iter__(self):
+		return self._status.__iter__()
+	
+	def __next__(self):
+		return self._status.__next__()
+
+
+# Test integer conversions
+_test_status = WordCharStatus((
+	CharStatus.correct,
+	CharStatus.not_in_solution,
+	CharStatus.correct,
+	CharStatus.wrong_position,
+	CharStatus.wrong_position))
+assert WordCharStatus.from_int(WordCharStatus.as_int(_test_status)) == _test_status
+
+
 @dataclass(frozen=True)
 class Word:
 	word: str
