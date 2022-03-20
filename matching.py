@@ -73,13 +73,13 @@ def num_solutions_remaining(guess: Word, possible_solution: Word, solutions: Ite
 # Inline unit tests
 
 # Basic
-assert _calculate_character_statuses(solution=Word('abcde'), guess=Word('fghij')) == (
+assert _calculate_character_statuses(solution=Word('ABCDE', 1), guess=Word('FGHIJ', 2)) == (
 	CharStatus.not_in_solution,
 	CharStatus.not_in_solution,
 	CharStatus.not_in_solution,
 	CharStatus.not_in_solution,
 	CharStatus.not_in_solution)
-assert _calculate_character_statuses(solution=Word('abcde'), guess=Word('acxyz')) == (
+assert _calculate_character_statuses(solution=Word('ABCDE', 1), guess=Word('ACXYZ', 2)) == (
 	CharStatus.correct,
 	CharStatus.wrong_position,
 	CharStatus.not_in_solution,
@@ -87,19 +87,19 @@ assert _calculate_character_statuses(solution=Word('abcde'), guess=Word('acxyz')
 	CharStatus.not_in_solution)
 
 # "multiple of same letter" logic
-assert _calculate_character_statuses(solution=Word('mount'), guess=Word('books')) == (
+assert _calculate_character_statuses(solution=Word('MOUNT', 1), guess=Word('BOOKS', 2)) == (
 	CharStatus.not_in_solution,
 	CharStatus.correct,
 	CharStatus.not_in_solution,
 	CharStatus.not_in_solution,
 	CharStatus.not_in_solution)
-assert _calculate_character_statuses(solution=Word('mount'), guess=Word('brook')) == (
+assert _calculate_character_statuses(solution=Word('MOUNT', 1), guess=Word('BROOK', 2)) == (
 	CharStatus.not_in_solution,
 	CharStatus.not_in_solution,
 	CharStatus.wrong_position,
 	CharStatus.not_in_solution,
 	CharStatus.not_in_solution)
-assert _calculate_character_statuses(solution=Word('books'), guess=Word('brook')) == (
+assert _calculate_character_statuses(solution=Word('BOOKS', 1), guess=Word('BROOK', 2)) == (
 	CharStatus.correct,
 	CharStatus.not_in_solution,
 	CharStatus.correct,

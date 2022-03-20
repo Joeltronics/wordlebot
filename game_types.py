@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 
 from colorama import Fore, Back, Style
+from dataclasses import dataclass
 
 from enum import Enum, unique
-from typing import Iterable, Type
+from typing import Iterable, Optional, Union
 
 
 FORMAT_UNKOWN = Back.BLACK + Fore.WHITE
@@ -21,29 +22,27 @@ class CharStatus(Enum):
 	correct = 3
 
 
+@dataclass(frozen=True)
 class Word:
-	def __init__(self, word: str):
+	word: str
+	index: int
 
-		if isinstance(word, Word):
-			self.word = word.word
-			return
-
-		if len(word) != 5:
+	def __post_init__(self):
+		if len(self.word) != 5:
 			raise ValueError('Words must have 5 letters')
 
-		if not word.isalpha():
-			raise ValueError(f'String is not word: "{word}"')
+		if not self.word.isalpha():
+			raise ValueError(f'String is not word: "{self.word}"')
 
-		word = word.upper()
-
-		self.word = word
+		if not self.word == self.word.upper():
+			raise ValueError(f'Word must be uppercase: "{self.word}"')
 
 	def __str__(self):
 		return self.word
 
 	def __eq__(self, other):
 		if isinstance(other, Word):
-			return self.word == other.word
+			return self.index == other.index
 		elif isinstance(other, str):
 			return self.word == other.upper()
 		else:
@@ -58,7 +57,7 @@ class Word:
 			raise TypeError()
 
 	def __hash__(self) -> int:
-		return hash(self.word)
+		return self.index
 
 
 def get_format(char_status: CharStatus) -> str:

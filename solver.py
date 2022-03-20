@@ -80,8 +80,8 @@ class Solver:
 			params=SolverParams(),
 			verbosity=SolverVerbosity.regular):
 
-		self.possible_solutions = valid_solutions
-		self.allowed_words = allowed_words
+		self.possible_solutions = set(valid_solutions)
+		self.allowed_words = set(allowed_words)
 		self.complexity_limit = complexity_limit
 		self.params = params
 		self.verbosity = verbosity

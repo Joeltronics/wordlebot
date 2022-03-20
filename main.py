@@ -16,6 +16,7 @@ import random
 from game_types import *
 import matching
 from solver import Solver, SolverVerbosity, SolverParams
+from word_list import get_word_from_str
 import word_list
 import user_input
 
@@ -149,7 +150,7 @@ def pick_solution(args, deterministic_idx: Optional[int] = None, do_print=True) 
 			print('WARNING: "%s" is an accepted word, but not in solutions list; proceeding with game anyway' % solution.upper())
 			print()
 		
-		solution = Word(solution)
+		solution = get_word_from_str(solution)
 
 		print('Solution given: %s' % solution)
 
@@ -263,8 +264,7 @@ def play_game(solution: Word, solver: Solver, auto_solve: bool, endless=False, s
 		else:
 			game_print('Solver best guess is %s' % solver_guess)
 			guess = user_input.ask_word(guess_num)
-
-		guess = Word(guess)
+			guess = get_word_from_str(guess)
 
 		guesses.append(guess)
 		statuses = matching.get_character_statuses(guess=guess, solution=solution)
