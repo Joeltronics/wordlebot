@@ -42,9 +42,8 @@ def get_character_statuses(guess: Word, solution: Word) -> WordCharStatus:
 
 
 def is_valid_for_guess(word: Word, guess: tuple[Word, WordCharStatus]) -> bool:
-	guess_word, guess_char_statuses = guess
-	status_if_this_is_solution = get_character_statuses(guess=guess_word, solution=word)
-	return status_if_this_is_solution == guess_char_statuses
+	status_if_this_is_solution = get_character_statuses(guess=guess[0], solution=word)
+	return status_if_this_is_solution == guess[1]
 
 
 def solutions_remaining(guess: Word, possible_solution: Word, solutions: Iterable[Word], return_character_status=False) -> List[Word]:
@@ -53,9 +52,10 @@ def solutions_remaining(guess: Word, possible_solution: Word, solutions: Iterabl
 	"""
 	# TODO: this is a bottleneck, see if it can be optimized
 	character_status = get_character_statuses(guess, possible_solution)
-	# TODO: we only need the list length; it may be faster just to instead use:
-	#new_possible_solutions = sum([is_valid_for_guess(word, (guess, character_status)) for word in solutions])
-	new_possible_solutions = [word for word in solutions if is_valid_for_guess(word, (guess, character_status))]
+	new_possible_solutions = [
+		word for word in solutions
+		if get_character_statuses(guess=guess, solution=word) == character_status
+	]
 
 	if return_character_status:
 		return new_possible_solutions, character_status
@@ -67,7 +67,11 @@ def num_solutions_remaining(guess: Word, possible_solution: Word, solutions: Ite
 	"""
 	If we guess this word, and see this result, figure out how many possible words could be remaining
 	"""
-	return len(solutions_remaining(guess=guess, possible_solution=possible_solution, solutions=solutions))
+	character_status = get_character_statuses(guess, possible_solution)
+	return sum(
+		get_character_statuses(guess=guess, solution=word) == character_status
+		for word in solutions
+	)
 
 
 # Inline unit tests
