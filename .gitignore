@@ -1,2 +1,5 @@
 *.pyc
 .idea
+cached_lut.npy
+cached_lut_guess_major.npy
+cached_lut_solution_major.npy

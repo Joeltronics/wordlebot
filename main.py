@@ -55,6 +55,7 @@ def parse_args():
 	group.add_argument('--ab', dest='a_b_test', action='store_true', help='Benchmark A/B test (currently hard-coded to compare recursive against non-recursive)')
 
 	group = parser.add_argument_group('Debugging')
+	group.add_argument('--lut', dest='use_lookup_table', action='store_true', help='Use lookup table for matching')
 	group.add_argument('--cheat', action='store_true', help='Show the solution before starting the game')
 	group.add_argument('--debug', action='store_true', help='Enable debug printing')
 	group.add_argument('--vdebug', dest='verbose_debug', action='store_true', help='Enable even more debug printing')
@@ -558,6 +559,9 @@ def benchmark(args, a_b_test: bool, num_benchmark=50):
 def main():
 	args = parse_args()
 	print('Wordle solver')
+
+	if args.use_lookup_table:
+		matching.init_lut()
 
 	if args.benchmark or args.a_b_test:
 		benchmark(args, a_b_test=args.a_b_test, num_benchmark=(args.benchmark if args.benchmark else DEFAULT_NUM_BENCHMARK))

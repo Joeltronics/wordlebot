@@ -60,8 +60,10 @@ This is an _okay_ way of accomplishing this goal, but it could definitely be imp
 
 #### Other misc improvements
 
-The code isn't really optimized, and there could be some potential performance gains there.
-This is just a quick project from a few evenings of work, so the code quality is definitely not perfect either.
+The code isn't really performance optimized, and there could be some potential gains there.
+
+Supposedly a lookup table works well for calculating guess results - there's a basic lookup table implemented, but its performance is only slightly better (after generating the lookup table the first time, which is very slow), and it's not well tested, so it's disabled by default.
+But there's more that could be done to optimize this, such as using more numpy vectorized behavior.
 
 There are various optimization parameters in the SolverParams dataclass, which can be tweaked to make different tradeoffs.
 So far, these have been chosen based on what seems make sense, not on actual results.
