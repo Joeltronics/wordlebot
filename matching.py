@@ -108,6 +108,37 @@ class MatchingLookupTable:
 	def lookup(self, guess: Word, solution: Word) -> WordCharStatus:
 		return WordCharStatus.from_int(self.lookup_as_int(guess=guess, solution=solution))
 
+	def get_character_statuses(self, guess: Word, solution: Word) -> WordCharStatus:
+		return self.lookup(guess=guess, solution=solution)
+
+	def get_character_statuses_as_int(self, guess: Word, solution: Word) -> int:
+		return self.lookup_as_int(guess=guess, solution=solution)
+
+	def solutions_remaining(self, guess: Word, possible_solution: Word, solutions: Iterable[Word], return_character_status=False) -> List[Word]:
+		"""
+		If we guess this word, and see this result, figure out which words remain
+		"""
+		character_status = self.lookup_as_int(guess=guess, solution=possible_solution)
+		new_possible_solutions = [
+			word for word in solutions
+			if self.lookup_as_int(guess=guess, solution=word) == character_status
+		]
+
+		if return_character_status:
+			return new_possible_solutions, WordCharStatus.from_int(character_status)
+		else:
+			return new_possible_solutions
+
+	def num_solutions_remaining(self, guess: Word, possible_solution: Word, solutions: Iterable[Word]) -> int:
+		"""
+		If we guess this word, and see this result, figure out how many possible words could be remaining
+		"""
+		character_status = self.lookup_as_int(guess=guess, solution=possible_solution)
+		return sum(
+			self.lookup_as_int(guess=guess, solution=word) == character_status
+			for word in solutions
+		)
+
 
 _lut = MatchingLookupTable()
 
@@ -184,28 +215,46 @@ def solutions_remaining(guess: Word, possible_solution: Word, solutions: Iterabl
 	"""
 	If we guess this word, and see this result, figure out which words remain
 	"""
-	# TODO: this is a bottleneck, see if it can be optimized
-	character_status = get_character_statuses(guess, possible_solution)
-	new_possible_solutions = [
-		word for word in solutions
-		if get_character_statuses(guess=guess, solution=word) == character_status
-	]
 
-	if return_character_status:
-		return new_possible_solutions, character_status
+	if _lut.is_init():
+		return _lut.solutions_remaining(
+			guess=guess,
+			possible_solution=possible_solution,
+			solutions=solutions,
+			return_character_status=return_character_status,
+		)
+
 	else:
-		return new_possible_solutions
+		character_status = _calculate_character_statuses(guess, possible_solution)
+		new_possible_solutions = [
+			word for word in solutions
+			if _calculate_character_statuses(guess=guess, solution=word) == character_status
+		]
+
+		if return_character_status:
+			return new_possible_solutions, character_status
+		else:
+			return new_possible_solutions
 
 
 def num_solutions_remaining(guess: Word, possible_solution: Word, solutions: Iterable[Word]) -> int:
 	"""
 	If we guess this word, and see this result, figure out how many possible words could be remaining
 	"""
-	character_status = get_character_statuses(guess, possible_solution)
-	return sum(
-		get_character_statuses(guess=guess, solution=word) == character_status
-		for word in solutions
-	)
+
+	if _lut.is_init():
+		return _lut.num_solutions_remaining(
+			guess=guess,
+			possible_solution=possible_solution,
+			solutions=solutions,
+		)
+
+	else:
+		character_status = _calculate_character_statuses(guess, possible_solution)
+		return sum(
+			_calculate_character_statuses(guess=guess, solution=word) == character_status
+			for word in solutions
+		)
 
 
 # Inline unit tests
