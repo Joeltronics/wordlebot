@@ -29,13 +29,13 @@ def parse_args():
 	default_params = SolverParams()
 
 	parser = argparse.ArgumentParser()
+	parser.add_argument('command', choices=['play', 'solve', 'benchmark', 'ab'], default=None, nargs='?')
 
 	group = parser.add_argument_group('Game')
 	group.add_argument('-s', dest='solution', type=str, default=None, help='Specify a solution')
 	group.add_argument('-g', metavar='GUESS', dest='guesses', type=str, nargs='+', help='Specify first guesses')
 	group.add_argument('--all-words', action='store_true', help='Allow all valid words as solutions, not limited set')
 	group.add_argument('--endless', action='store_true', help="Don't end after six guesses if still unsolved")
-	group.add_argument('--solve', action='store_true', help="Automatically use solver's guess")
 	group.add_argument('--nyt', dest='use_nyt_lists', action='store_true', help="Use updated NYT word lists")
 
 	group = parser.add_argument_group('Solver')
@@ -50,14 +50,11 @@ def parse_args():
 
 	group = parser.add_argument_group('Benchmarking & A/B testing')
 	group.add_argument(
-		'-b', metavar='RUNS', dest='benchmark', type=int, default=None,
+		'-b', metavar='RUNS', dest='num_benchmark', type=int, default=None,
 		help='Benchmark performance')
-	group.add_argument('--benchmark', dest='benchmark', action='store_const', const=DEFAULT_NUM_BENCHMARK, help='Equivalent to -b %i' % DEFAULT_NUM_BENCHMARK)
-	group.add_argument('--ab', dest='a_b_test', action='store_true', help='Benchmark A/B test (currently hard-coded to compare recursive against non-recursive)')
 
 	group = parser.add_argument_group('Debugging')
 	group.add_argument('--lut', dest='use_lookup_table', action='store_true', help='Use lookup table for matching')
-	group.add_argument('--cheat', action='store_true', help='Show the solution before starting the game')
 	group.add_argument('--debug', action='store_true', help='Enable debug printing')
 	group.add_argument('--vdebug', dest='verbose_debug', action='store_true', help='Enable even more debug printing')
 
@@ -66,6 +63,21 @@ def parse_args():
 	if args.limit < 0:
 		raise ValueError('Minimum -l value is 0')
 
+	if args.command is None:
+		if args.num_benchmark is not None:
+			args.command = 'benchmark'
+		else:
+			print()
+			args.command = [
+				'play',
+				'solve',
+				'benchmark',
+				'ab',
+			][user_input.ask_choice('Select:', ['Play', 'Run solver', 'Run benchmarks', 'Run A/B tests'])]
+
+	if args.num_benchmark is None:
+		args.num_benchmark = DEFAULT_NUM_BENCHMARK
+	
 	return args
 
 
@@ -169,130 +181,184 @@ def pick_solution(args, deterministic_idx: Optional[int] = None, do_print=True) 
 		else:
 			solution = random.choice(words)
 
-		if args.solve:
+		if args.command == 'solve':
 			print()
 			print('Using auto solve, so showing solution: %s' % solution)
-		elif args.cheat:
-			print()
-			print('CHEAT MODE: solution is %s' % solution)
 
 	return solution
 
 
-def play_game(solution: Word, solver: Solver, auto_solve: bool, endless=False, silent=False, specified_guesses=None) -> int:
-	"""
-	:returns: Number of guesses game was solved in
-	"""
+def print_possible_solutions(solver, max_num_to_print=100):
+	
+	num_possible_solutions = solver.get_num_possible_solutions()
 
-	def game_print(*args, **kwargs):
-		if not silent:
+	if (max_num_to_print is not None) and (num_possible_solutions > max_num_to_print):
+		# 101+
+		print('%i possible solutions' % num_possible_solutions)
+
+	elif num_possible_solutions > 10:
+		# 11-100
+		print('%i possible solutions:' % num_possible_solutions)
+		solutions = sorted(list(solver.get_possible_solitions()))
+		for tens in range(len(solutions) // 10 + 1):
+			idx_start = tens * 10
+			idx_end = min(idx_start + 10, len(solutions))
+			print('  ' + ', '.join([str(solution) for solution in solutions[idx_start:idx_end]]))
+
+	elif num_possible_solutions > 1:
+		# 2-10
+		solutions = sorted([solution for solution in solver.get_possible_solitions()])
+		print('%i possible solutions: %s' % (num_possible_solutions, ', '.join([str(s) for s in solutions])))
+
+	else:
+		# 1
+		print('Only 1 possible solution: %s' % tuple(solver.get_possible_solitions())[0])
+
+
+def print_most_common_unsolved_letters(solver):
+	num_possible_solutions = solver.get_num_possible_solutions()
+
+	if num_possible_solutions > 2:
+
+		unsolved_letters_overall_counter, unsolved_letter_positional_counters = \
+			solver.get_unsolved_letters_counter(per_position=True)
+
+		print(
+			'Order of most common unsolved letters: ' +
+			''.join([letter.upper() for letter, frequency in unsolved_letters_overall_counter.most_common()]))
+
+		for position_idx, position_counter in enumerate(unsolved_letter_positional_counters):
+			if position_counter is None:
+				continue
+			print(
+				f'Order of most common position {position_idx + 1} letters: ' +
+				''.join([letter.upper() for letter, frequency in position_counter.most_common()]))
+
+
+class Game:
+	def __init__(
+			self,
+			solution: Word,
+			solver: Optional[Solver],
+			silent = False,
+			specified_guesses: Optional[list[Word]] = None):
+
+		self.solution = solution
+		self.solver = solver
+		self.silent = silent
+		self.guess_results = []
+
+		if specified_guesses is None:
+			self.specified_guesses = []
+		else:
+			def _check_guess(guess: str) -> str:
+				if len(guess) != 5:
+					raise ValueError('Specified guess "%s" does not have length 5!' % guess.upper())
+				# TODO: validate guesses
+				return guess.lower()
+			self.specified_guesses = [_check_guess(guess) for guess in specified_guesses]
+
+		self.letter_status = None if silent else LetterStatus()
+
+	def print(self, *args, **kwargs):
+		if not self.silent:
 			print(*args, **kwargs)
 
-	if specified_guesses is None:
-		specified_guesses = []
-	else:
-		def _check_guess(guess: str) -> str:
-			if len(guess) != 5:
-				raise ValueError('Specified guess "%s" does not have length 5!' % guess.upper())
-			# TODO: warn if guess isn't in list of allowed guesses
-			return guess.lower()
-		specified_guesses = [_check_guess(guess) for guess in specified_guesses]
+	def _show_solution(self):
+		print('Solution is %s' % self.solution)
 
-	letter_status = LetterStatus()
-	guesses = []
+	def _get_guess(self, turn_num: int, auto_solve: bool) -> Word:
+		if not self.silent:
+			self.letter_status.print_keyboard()
+		self.print()
 
-	game_print()
-
-	for guess_num in itertools.count(1):
-
-		if not silent:
-			letter_status.print_keyboard()
-		game_print()
-
-		specified_guess = specified_guesses[guess_num - 1] if (guess_num - 1) < len(specified_guesses) else None
-
-		solver_guess = None
-
-		if (solver is not None) and (not specified_guess):
-
-			num_possible_solutions = solver.get_num_possible_solutions()
-
-			if num_possible_solutions > 100:
-				# 101+
-				game_print('%i possible solutions' % num_possible_solutions)
-
-			elif num_possible_solutions > 10:
-				# 11-100
-				game_print('%i possible solutions:' % num_possible_solutions)
-				solutions = sorted(list(solver.get_possible_solitions()))
-				for tens in range(len(solutions) // 10 + 1):
-					idx_start = tens * 10
-					idx_end = min(idx_start + 10, len(solutions))
-					game_print('  ' + ', '.join([str(solution) for solution in solutions[idx_start:idx_end]]))
-
-			elif num_possible_solutions > 1:
-				# 2-10
-				solutions = sorted([solution for solution in solver.get_possible_solitions()])
-				game_print('%i possible solutions: %s' % (num_possible_solutions, ', '.join([str(s) for s in solutions])))
-
-			else:
-				# 1
-				game_print('Only 1 possible solution: %s' % tuple(solver.get_possible_solitions())[0])
-
-			if num_possible_solutions > 2:
-
-				unsolved_letters_overall_counter, unsolved_letter_positional_counters = \
-					solver.get_unsolved_letters_counter(per_position=True)
-
-				game_print(
-					'Order of most common unsolved letters: ' +
-					''.join([letter.upper() for letter, frequency in unsolved_letters_overall_counter.most_common()]))
-
-				for position_idx, position_counter in enumerate(unsolved_letter_positional_counters):
-					if position_counter is None:
-						continue
-					game_print(
-						f'Order of most common position {position_idx + 1} letters: ' +
-						''.join([letter.upper() for letter, frequency in position_counter.most_common()]))
-
-			game_print()
-			solver_guess = solver.get_best_guess()
+		specified_guess = self.specified_guesses[turn_num - 1] if (turn_num - 1) < len(self.specified_guesses) else None
 
 		if specified_guess:
-			game_print('Using specified guess: %s' % specified_guess)
-			guess = specified_guess
-		elif auto_solve and (solver_guess is not None):
-			game_print('Using guess from solver: %s' % solver_guess)
-			guess = solver_guess
-		else:
-			game_print('Solver best guess is %s' % solver_guess)
-			guess = user_input.ask_word(guess_num)
-			guess = get_word_from_str(guess)
+			self.print('Using specified guess: %s' % specified_guess)
+			return get_word_from_str(specified_guess)
 
-		guesses.append(guess)
-		result = matching.get_guess_result(guess=guess, solution=solution)
+		if auto_solve:
+			if self.solver is None:
+				raise AssertionError('Cannot auto-solve if solver is not given!')
+	
+			if not self.silent:
+				print_possible_solutions(solver=self.solver)
+				print_most_common_unsolved_letters(solver=self.solver)
+
+			self.print()
+			guess = self.solver.get_best_guess()
+			self.print('Using guess from solver: %s' % guess)
+			return guess
+
+		extra_commands = {
+			'cheat': (lambda: self._show_solution(), 'Show solution')
+		}
+
+		if self.solver is not None:
+			extra_commands['num'] = (
+				lambda: self.print('%i possible solutions' % self.solver.get_num_possible_solutions()),
+				'Show number of possible solutions'
+			)
+			extra_commands['list'] = (
+				lambda: print_possible_solutions(solver=self.solver, max_num_to_print=None),
+				'List possible solutions'
+			)
+			extra_commands['stats'] = (
+				lambda: print_most_common_unsolved_letters(solver=self.solver),
+				'List most common unsolved letters'
+			)
+			extra_commands['solve'] = (
+				lambda: self.print("Solver's best guess is %s" % self.solver.get_best_guess()),
+				'Get guess from solver'
+			)
+
+		guess = user_input.ask_word(turn_num, extra_commands=extra_commands)
+		guess = get_word_from_str(guess)
+		
+		return guess
+
+	def _handle_guess(self, guess: Word):
+
+		result = matching.get_guess_result(guess=guess, solution=self.solution)
 		guess_with_result = GuessWithResult(guess=guess, result=result)
 
-		letter_status.add_guess(guess_with_result)
-		solver.add_guess(guess_with_result)
+		self.guess_results.append(guess_with_result)
 
-		game_print()
-		for n, this_guess in enumerate(guesses):
-			this_result = matching.get_guess_result(guess=this_guess, solution=solution)
-			this_guess_with_result = GuessWithResult(guess=this_guess, result=this_result)
-			game_print('%i: %s' % (n + 1, this_guess_with_result))
-		game_print()
-		
-		if guess == solution:
-			game_print('Success!')
-			return guess_num
+		if self.letter_status is not None:
+			self.letter_status.add_guess(guess_with_result)
 
-		if guess_num == 6 and endless:
-			game_print('Playing in endless mode - continuing after 6 guesses')
-			game_print()
-		elif guess_num >= 6 and not endless:
-			game_print('Failed, the solution was %s' % solution)
-			return 0
+		if self.solver is not None:
+			self.solver.add_guess(guess_with_result)
+
+		self.print()
+		for n, guess_to_print in enumerate(self.guess_results):
+			self.print('%i: %s' % (n + 1, guess_to_print))
+		self.print()
+
+	def play(self, auto_solve: bool, endless=False) -> int:
+		"""
+		:returns: Number of guesses game was solved in
+		"""
+
+		self.print()
+
+		for turn_num in itertools.count(1):
+
+			guess = self._get_guess(turn_num=turn_num, auto_solve=auto_solve)
+			self._handle_guess(guess)
+
+			if guess == self.solution:
+				self.print('Success!')
+				return turn_num
+
+			elif turn_num == 6 and endless:
+				self.print('Playing in endless mode - continuing after 6 guesses')
+				self.print()
+
+			elif turn_num >= 6 and not endless:
+				self.print('Failed, the solution was %s' % self.solution)
+				return 0
 
 
 class RollingStats:
@@ -367,7 +433,9 @@ def make_solver_params(args, recursion_max_solutions=None, recursive_minimax_dep
 	)
 
 
-def benchmark(args, a_b_test: bool, num_benchmark=50):
+def benchmark(args, a_b_test: bool):
+
+	num_benchmark = args.num_benchmark
 
 	results = []
 
@@ -441,7 +509,9 @@ def benchmark(args, a_b_test: bool, num_benchmark=50):
 			start_time = time.time()
 
 			solver = Solver(**this_solver_args)
-			num_guesses = play_game(solution=solution, solver=solver, auto_solve=True, endless=True, silent=True, specified_guesses=args.guesses)
+
+			game = Game(solution=solution, solver=solver, silent=True, specified_guesses=args.guesses)
+			num_guesses = game.play(endless=True, auto_solve=True)
 
 			end_time = time.time()
 			duration = end_time - start_time
@@ -561,33 +631,40 @@ def benchmark(args, a_b_test: bool, num_benchmark=50):
 
 
 def main():
-	args = parse_args()
 	print('Wordle solver')
+
+	args = parse_args()
 
 	word_list.init(use_nyt_lists=args.use_nyt_lists)
 
 	if args.use_lookup_table:
 		matching.init_lut()
 
-	if args.benchmark or args.a_b_test:
-		benchmark(args, a_b_test=args.a_b_test, num_benchmark=(args.benchmark if args.benchmark else DEFAULT_NUM_BENCHMARK))
-		return
+	if args.command == 'benchmark':
+		benchmark(args, a_b_test=False)
 
-	solution = pick_solution(args)
+	elif args.command == 'ab':
+		benchmark(args, a_b_test=True)
 
-	solver = Solver(
-		valid_solutions=(word_list.words if (args.all_words or args.agnostic) else word_list.solutions),
-		allowed_words=word_list.words,
-		complexity_limit=int(round(10.0 ** args.limit)),
-		verbosity=(
-			SolverVerbosity.verbose_debug if args.verbose_debug else
-			SolverVerbosity.debug if args.debug else
-			SolverVerbosity.regular),
-		params=make_solver_params(args),
-	)
+	elif args.command in ['play', 'solve']:
 
-	play_game(solution=solution, solver=solver, auto_solve=args.solve, endless=args.endless, specified_guesses=args.guesses)
+		solver = Solver(
+			valid_solutions=(word_list.words if (args.all_words or args.agnostic) else word_list.solutions),
+			allowed_words=word_list.words,
+			complexity_limit=int(round(10.0 ** args.limit)),
+			verbosity=(
+				SolverVerbosity.verbose_debug if args.verbose_debug else
+				SolverVerbosity.debug if args.debug else
+				SolverVerbosity.regular),
+			params=make_solver_params(args),
+		)
 
+		solution = pick_solution(args)
+		game = Game(solution=solution, solver=solver, silent=False, specified_guesses=args.guesses)
+		game.play(endless=args.endless, auto_solve=(args.command == 'solve'))
+
+	else:
+		raise AssertionError('Unknown command: %s' % args.command)
 
 if __name__ == "__main__":
 	main()
