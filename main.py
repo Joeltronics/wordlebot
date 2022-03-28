@@ -89,7 +89,7 @@ class LetterStatus:
 
 	def __init__(self):
 		self.char_status = {
-			chr(ch): CharStatus.unknown for ch in range(ord('a'), ord('z') + 1)
+			chr(ch): LetterResult.unknown for ch in range(ord('a'), ord('z') + 1)
 		}
 
 	def _format_char(self, ch: str):
@@ -104,8 +104,8 @@ class LetterStatus:
 		for row in rows:
 			print(''.join([self._format_char(ch) for ch in row]) + Style.RESET_ALL)
 
-	def add_guess(self, guess: Word, statuses: WordCharStatus):
-		for character, status in zip(guess.word.lower(), statuses):
+	def add_guess(self, guess: Word, result: GuessResult):
+		for character, status in zip(guess.word.lower(), result):
 			if self.char_status[character].value < status.value:
 				self.char_status[character] = status
 
@@ -268,15 +268,15 @@ def play_game(solution: Word, solver: Solver, auto_solve: bool, endless=False, s
 			guess = get_word_from_str(guess)
 
 		guesses.append(guess)
-		statuses = matching.get_character_statuses(guess=guess, solution=solution)
+		result = matching.get_guess_result(guess=guess, solution=solution)
 
-		letter_status.add_guess(guess, statuses)
-		solver.add_guess(guess, statuses)
+		letter_status.add_guess(guess, result)
+		solver.add_guess(guess, result)
 
 		game_print()
 		for n, this_guess in enumerate(guesses):
-			statuses = matching.get_character_statuses(guess=this_guess, solution=solution)
-			game_print('%i: %s' % (n + 1, format_guess(this_guess, statuses)))
+			result = matching.get_guess_result(guess=this_guess, solution=solution)
+			game_print('%i: %s' % (n + 1, format_guess(this_guess, result)))
 		game_print()
 		
 		if guess == solution:

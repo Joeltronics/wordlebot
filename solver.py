@@ -122,19 +122,19 @@ class Solver:
 			matching.is_valid_for_guess(word, guess) for guess in self.guesses
 		])
 
-	def add_guess(self, guess_word: Word, character_statuses: Iterable[CharStatus]):
+	def add_guess(self, guess_word: Word, guess_result: GuessResult):
 
-		this_guess = GuessWithStatus(guess=guess_word, statuses=character_statuses)
+		this_guess = GuessWithResult(guess=guess_word, result=guess_result)
 		self.guesses.append(this_guess)
 
 		self.possible_solutions = {word for word in self.possible_solutions if matching.is_valid_for_guess(word, this_guess)}
 		assert len(self.possible_solutions) > 0
 
 		# TODO: in theory, could use process of elimination to sometimes guarantee position from yellow letters
-		# A simple way to do this would be to look at remaining possible solutions instead of past character statuses
+		# A simple way to do this would be to look at remaining possible solutions instead of past letter results
 		# However, I suspect this is unlikely to actually make much of a difference in practice
 		for idx in range(5):
-			if character_statuses[idx] == CharStatus.correct:
+			if guess_result[idx] == LetterResult.correct:
 				self.solved_letters[idx] = guess_word[idx]
 
 	def get_unsolved_letters_counter(self, possible_solutions: Optional[list[str]] = None, per_position=False):
@@ -689,15 +689,15 @@ class Solver:
 
 				len_at_start_of_loop = len(remaining_possible_solutions)
 
-				possible_solutions_this_guess, character_status = matching.solutions_remaining(
+				possible_solutions_this_guess, result = matching.solutions_remaining(
 					guess=guess,
 					possible_solution=remaining_possible_solutions[0],
 					solutions=possible_solutions,
-					return_character_status=True,
+					return_result=True,
 				)
 
 				if self.one_line_print:
-					this_recursive_log_str = recursive_log_str + ' ' + format_guess(guess, character_status)
+					this_recursive_log_str = recursive_log_str + ' ' + format_guess(guess, result)
 					self.print_progress(this_recursive_log_str)
 				else:
 					this_recursive_log_str = ''
