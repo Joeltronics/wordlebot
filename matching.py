@@ -7,7 +7,7 @@ import word_list
 import numpy as np
 import sys
 import os
-from typing import Iterable, List
+from typing import Iterable, Union
 
 GUESS_MAJOR = True
 
@@ -114,7 +114,7 @@ class MatchingLookupTable:
 	def get_guess_result_as_int(self, guess: Word, solution: Word) -> int:
 		return self.lookup_as_int(guess=guess, solution=solution)
 
-	def solutions_remaining(self, guess: Word, possible_solution: Word, solutions: Iterable[Word], return_result=False) -> List[Word]:
+	def solutions_remaining(self, guess: Word, possible_solution: Word, solutions: Iterable[Word], return_result=False) -> list[Word]:
 		"""
 		If we guess this word, and see this result, figure out which words remain
 		"""
@@ -211,7 +211,9 @@ def is_valid_for_guess(word: Word, guess: GuessWithResult) -> bool:
 	return result_if_this_is_solution == guess.result
 
 
-def solutions_remaining(guess: Word, possible_solution: Word, solutions: Iterable[Word], return_result=False) -> List[Word]:
+def solutions_remaining(
+		guess: Word, possible_solution: Word, solutions: Iterable[Word], return_result=False
+) -> Union[list[Word], tuple[list[Word], GuessResult]]:
 	"""
 	If we guess this word, and see this result, figure out which words remain
 	"""

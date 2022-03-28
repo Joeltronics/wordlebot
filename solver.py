@@ -7,7 +7,7 @@ from enum import Enum, unique
 from math import sqrt
 import os
 import sys
-from typing import Tuple, Iterable, Optional, Union, List
+from typing import Iterable, Optional, Union
 
 from game_types import *
 import matching
@@ -114,7 +114,7 @@ class Solver:
 	def get_num_possible_solutions(self) -> int:
 		return len(self.possible_solutions)
 
-	def get_possible_solitions(self) -> List[str]:
+	def get_possible_solitions(self) -> list[str]:
 		return self.possible_solutions
 
 	def _is_valid(self, word: str) -> bool:
@@ -122,20 +122,19 @@ class Solver:
 			matching.is_valid_for_guess(word, guess) for guess in self.guesses
 		])
 
-	def add_guess(self, guess_word: Word, guess_result: GuessResult):
+	def add_guess(self, guess: GuessWithResult):
 
-		this_guess = GuessWithResult(guess=guess_word, result=guess_result)
-		self.guesses.append(this_guess)
+		self.guesses.append(guess)
 
-		self.possible_solutions = {word for word in self.possible_solutions if matching.is_valid_for_guess(word, this_guess)}
+		self.possible_solutions = {word for word in self.possible_solutions if matching.is_valid_for_guess(word, guess)}
 		assert len(self.possible_solutions) > 0
 
 		# TODO: in theory, could use process of elimination to sometimes guarantee position from yellow letters
 		# A simple way to do this would be to look at remaining possible solutions instead of past letter results
 		# However, I suspect this is unlikely to actually make much of a difference in practice
 		for idx in range(5):
-			if guess_result[idx] == LetterResult.correct:
-				self.solved_letters[idx] = guess_word[idx]
+			if guess.result[idx] == LetterResult.correct:
+				self.solved_letters[idx] = guess.guess[idx]
 
 	def get_unsolved_letters_counter(self, possible_solutions: Optional[list[str]] = None, per_position=False):
 
@@ -176,7 +175,7 @@ class Solver:
 			positional: bool,
 			possible_solutions: Optional[Iterable[str]] = None,
 			sort=True,
-			debug_log=False) -> List[Tuple[str, int]]:
+			debug_log=False) -> list[tuple[str, int]]:
 		"""
 		Score guesses based on occurrence of most common unsolved letters
 		"""
@@ -240,7 +239,7 @@ class Solver:
 			positional = True,
 			return_score = False,
 			debug_log = False,
-	) -> List[Union[str, Tuple[str, int]]]:
+	) -> list[Union[str, tuple[str, int]]]:
 		"""
 		Prune guesses based on occurrence of most common unsolved letters
 		"""
@@ -259,7 +258,7 @@ class Solver:
 		else:
 			return [g[0] for g in guesses_scored]
 
-	def _determine_prune_counts(self, max_num_matches: Optional[int]) -> Tuple[int, int, int]:
+	def _determine_prune_counts(self, max_num_matches: Optional[int]) -> tuple[int, int, int]:
 		"""
 		Determine how many guesses & solutions to prune
 
@@ -469,7 +468,7 @@ class Solver:
 			guesses: Iterable[Word],
 			solutions_to_check_possible: Iterable[Word] = None,
 			solutions_to_check_num_remaining: Iterable[Word] = None,
-			) -> Tuple[str, float]:
+			) -> tuple[str, float]:
 
 		if solutions_to_check_possible is None:
 			solutions_to_check_possible = self.possible_solutions
@@ -631,7 +630,7 @@ class Solver:
 			recursive_depth: int,
 			recursion_depth_limit: int = RECURSION_HARD_LIMIT,
 			recursive_log_str: str = ''
-	) -> Tuple[str, float]:
+	) -> tuple[str, float]:
 
 		assert recursive_depth < RECURSION_HARD_LIMIT
 
