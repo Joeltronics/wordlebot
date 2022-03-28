@@ -21,6 +21,14 @@ class CharStatus(Enum):
 	wrong_position = 2
 	correct = 3
 
+	def get_format(self) -> str:
+		return {
+			CharStatus.unknown:         FORMAT_UNKOWN,
+			CharStatus.not_in_solution: FORMAT_NOT_IN_SOLUTION,
+			CharStatus.wrong_position:  FORMAT_WRONG_POSITION,
+			CharStatus.correct:         FORMAT_CORRECT,
+		}[self]
+
 
 assert all([0 <= status.value < 4 for status in CharStatus])
 
@@ -114,16 +122,16 @@ class Word:
 		return self.word[idx]
 
 
-def get_format(char_status: CharStatus) -> str:
-	return {
-		CharStatus.unknown:         FORMAT_UNKOWN,
-		CharStatus.not_in_solution: FORMAT_NOT_IN_SOLUTION,
-		CharStatus.wrong_position:  FORMAT_WRONG_POSITION,
-		CharStatus.correct:         FORMAT_CORRECT,
-	}[char_status]
+@dataclass(frozen=True)
+class GuessWithStatus:
+	guess: Word
+	statuses: WordCharStatus
+
+	def __str__(self):
+		return ''.join([
+			char_status.get_format() + character for character, char_status in zip(self.guess, self.statuses)
+		]) + Style.RESET_ALL
 
 
 def format_guess(guess: Word, statuses: Iterable[CharStatus]) -> str:
-	return ''.join([
-		get_format(status) + character.upper() for character, status in zip(guess, statuses)
-	]) + Style.RESET_ALL
+	return str(GuessWithStatus(guess=guess, statuses=statuses))

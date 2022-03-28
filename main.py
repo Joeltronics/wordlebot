@@ -93,7 +93,7 @@ class LetterStatus:
 		}
 
 	def _format_char(self, ch: str):
-		return get_format(self.char_status[ch.lower()]) + ch.upper()
+		return self.char_status[ch.lower()].get_format() + ch.upper()
 
 	def print_keyboard(self):
 		rows = [

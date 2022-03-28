@@ -206,9 +206,9 @@ def get_character_statuses(guess: Word, solution: Word) -> WordCharStatus:
 		return _calculate_character_statuses(guess=guess, solution=solution)
 
 
-def is_valid_for_guess(word: Word, guess: tuple[Word, WordCharStatus]) -> bool:
-	status_if_this_is_solution = get_character_statuses(guess=guess[0], solution=word)
-	return status_if_this_is_solution == guess[1]
+def is_valid_for_guess(word: Word, guess: GuessWithStatus) -> bool:
+	status_if_this_is_solution = get_character_statuses(guess=guess.guess, solution=word)
+	return status_if_this_is_solution == guess.statuses
 
 
 def solutions_remaining(guess: Word, possible_solution: Word, solutions: Iterable[Word], return_character_status=False) -> List[Word]:

@@ -124,7 +124,7 @@ class Solver:
 
 	def add_guess(self, guess_word: Word, character_statuses: Iterable[CharStatus]):
 
-		this_guess = (guess_word, character_statuses)
+		this_guess = GuessWithStatus(guess=guess_word, statuses=character_statuses)
 		self.guesses.append(this_guess)
 
 		self.possible_solutions = {word for word in self.possible_solutions if matching.is_valid_for_guess(word, this_guess)}
