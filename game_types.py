@@ -82,7 +82,7 @@ class Word:
 
 	def __post_init__(self):
 		if len(self.word) != 5:
-			raise ValueError('Words must have 5 letters')
+			raise ValueError(f'Word does not have 5 letters: "{self.word}"')
 
 		if not self.word.isalpha():
 			raise ValueError(f'String is not word: "{self.word}"')

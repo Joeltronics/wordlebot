@@ -36,6 +36,7 @@ def parse_args():
 	group.add_argument('--all-words', action='store_true', help='Allow all valid words as solutions, not limited set')
 	group.add_argument('--endless', action='store_true', help="Don't end after six guesses if still unsolved")
 	group.add_argument('--solve', action='store_true', help="Automatically use solver's guess")
+	group.add_argument('--nyt', dest='use_nyt_lists', action='store_true', help="Use updated NYT word lists")
 
 	group = parser.add_argument_group('Solver')
 	group.add_argument(
@@ -562,6 +563,8 @@ def benchmark(args, a_b_test: bool, num_benchmark=50):
 def main():
 	args = parse_args()
 	print('Wordle solver')
+
+	word_list.init(use_nyt_lists=args.use_nyt_lists)
 
 	if args.use_lookup_table:
 		matching.init_lut()
