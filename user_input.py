@@ -14,9 +14,9 @@ def ask_word(guess_num: int, extra_commands: Optional[dict[str, tuple[Callable, 
 
 	while True:
 		if guess_num <= 6:
-			input_str = "Enter guess %i/6 (or '!help' for a list of extra commands): "
+			input_str = 'Enter guess %i/6 (or "!help" for a list of extra commands): '
 		else:
-			input_str = "Enter guess %i (or '!help' for a list of extra commands): "
+			input_str = 'Enter guess %i (or "!help" for a list of extra commands): '
 
 		user_input = input(input_str % guess_num).strip()
 
@@ -44,7 +44,7 @@ def ask_word(guess_num: int, extra_commands: Optional[dict[str, tuple[Callable, 
 			if extra_commands and command in extra_commands.keys():
 				extra_commands[command][0]()
 			else:
-				print('Unknown command: !%s' % command)
+				print('Unknown command: "!%s". Enter "!help" for a list of commands' % command)
 			continue
 
 		guess = user_input
