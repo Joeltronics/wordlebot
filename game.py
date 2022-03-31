@@ -3,6 +3,7 @@
 import itertools
 from typing import Optional
 
+from copy import copy
 from game_types import *
 import matching
 from solver import Solver
@@ -10,7 +11,7 @@ import user_input
 from word_list import get_word_from_str
 
 
-class LetterStatus:
+class LetterStatuses:
 
 	def __init__(self):
 		self.char_status = {
@@ -83,6 +84,113 @@ def print_most_common_unsolved_letters(solver):
 				''.join([letter.upper() for letter, frequency in position_counter.most_common()]))
 
 
+def print_all_letter_combos(guess_results: list[GuessWithResult]):
+
+	debug_print = False
+
+	def combo_to_str(combo: list[Optional[int]]) -> str:
+		return ''.join([(letter if letter is not None else '-') for letter in combo])
+
+	green_letters = [None] * 5
+	unsolved_positions = set([0, 1, 2, 3, 4])
+
+	for result in guess_results:
+		for idx, (letter, result) in enumerate(zip(result.guess, result.result)):
+			if result == LetterResult.correct:
+				green_letters[idx] = letter
+				if idx in unsolved_positions:
+					unsolved_positions.remove(idx)
+
+	if debug_print:
+		print(f"Fully known letters: {combo_to_str(green_letters)}")
+
+	# Now look at all yellow letters
+	# Each time we find a yellow letter:
+	# If this yellow letter could be explained by one of the greens we've already found, ignore it
+	# Otherwise, add it to the yellow letters list, in position
+
+	yellow_letters = dict()
+
+	for guess_result in guess_results:
+
+		guess = guess_result.guess
+		result = guess_result.result
+
+		unique_letters = set(guess.word)
+		for letter in unique_letters:
+
+			letter_and_status = [
+				(idx, status) for idx, (l, status) in enumerate(zip(guess, result)) if l == letter
+			]
+
+			assert len(letter_and_status) > 0
+
+			letter_positions_this_guess_yellow = set(
+				idx for idx, status in letter_and_status if status == LetterResult.wrong_position
+			)
+
+			letter_positions_this_guess_green = set(
+				idx for idx, status in letter_and_status if status == LetterResult.correct
+			)
+
+			letter_positions_any_guess_green = set(
+				idx for idx, l in enumerate(green_letters) if l == letter
+			)
+
+			num_unexplained_yellow = len(letter_positions_this_guess_green) + len(letter_positions_this_guess_yellow) - len(letter_positions_any_guess_green)
+			if num_unexplained_yellow <= 0:
+				continue
+
+			if letter not in yellow_letters.keys():
+				yellow_letters[letter] = set()
+
+			yellow_letters[letter] |= letter_positions_this_guess_yellow
+
+	if debug_print:
+		print(f'Yellow letters: {repr(yellow_letters)}')
+
+	combos = [
+		green_letters
+	]
+
+	for letter, positions in yellow_letters.items():
+
+		positions_this_letter_could_be = (set([0, 1, 2, 3, 4]) - positions) & unsolved_positions
+
+		if debug_print:
+			print(f'Letter {letter} could be in positions: {repr(positions_this_letter_could_be)}')
+		assert len(positions_this_letter_could_be) > 0
+
+		if debug_print:
+			print(f'Combos before: {combos}')
+
+		new_combos = []
+
+		for combo in combos:
+
+			empty_positions = set(idx for idx, l in enumerate(combo) if l is None)
+			letter_positions_this_combo = empty_positions & positions_this_letter_could_be
+
+			if debug_print:
+				print(f'combo {combo_to_str(combo)}, all empty positions {empty_positions}, this letter could be in {letter_positions_this_combo}')
+
+			for letter_idx in letter_positions_this_combo:
+				this_new_combo = copy(combo)
+				this_new_combo[letter_idx] = letter
+				new_combos.append(this_new_combo)
+
+				if debug_print:
+					print(f'new combo {this_new_combo}')
+
+		combos = new_combos
+
+		if debug_print:
+			print(f'Combos after letter {letter}: {combos}')
+
+	for combo in combos:
+		print(combo_to_str(combo))
+
+
 class Game:
 	def __init__(
 			self,
@@ -106,7 +214,7 @@ class Game:
 				return guess.lower()
 			self.specified_guesses = [_check_guess(guess) for guess in specified_guesses]
 
-		self.letter_status = None if silent else LetterStatus()
+		self.letter_status = None if silent else LetterStatuses()
 
 	def print(self, *args, **kwargs):
 		if not self.silent:
@@ -159,6 +267,10 @@ class Game:
 			extra_commands['solve'] = (
 				lambda: self.print("Solver's best guess is %s" % self.solver.get_best_guess()),
 				'Get guess from solver'
+			)
+			extra_commands['combos'] = (
+				lambda: print_all_letter_combos(self.guess_results),
+				'Print all letter combos'
 			)
 
 		guess = user_input.ask_word(turn_num, extra_commands=extra_commands)
