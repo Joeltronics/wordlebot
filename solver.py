@@ -124,10 +124,12 @@ class Solver:
 
 	def add_guess(self, guess: GuessWithResult):
 
-		self.guesses.append(guess)
+		possible_solutions = {word for word in self.possible_solutions if matching.is_valid_for_guess(word, guess)}
+		if len(possible_solutions) == 0:
+			raise ValueError('This guess result does not leave any possible solutions!')
 
-		self.possible_solutions = {word for word in self.possible_solutions if matching.is_valid_for_guess(word, guess)}
-		assert len(self.possible_solutions) > 0
+		self.possible_solutions = possible_solutions
+		self.guesses.append(guess)
 
 		# TODO: in theory, could use process of elimination to sometimes guarantee position from yellow letters
 		# A simple way to do this would be to look at remaining possible solutions instead of past letter results

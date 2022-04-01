@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from typing import Optional, Callable
+from game_types import GuessResult, LetterResult
 
 import word_list
 
@@ -67,6 +68,33 @@ def ask_word(guess_num: int, extra_commands: Optional[dict[str, tuple[Callable, 
 				continue
 
 		return guess
+
+
+def ask_result() -> GuessResult:
+	while True:
+
+		user_input = input('Enter result - 0=grey, 1=yellow, 2=green: ').strip()
+
+		if not user_input:
+			continue
+
+		if user_input.lower() in _exit_words:
+			raise SystemExit()
+
+		if (len(user_input) != 5) or (not all(val in ('0', '1', '2') for val in user_input)):
+			print('Invalid! Must be 5-digit number of 0, 1, and 2')
+			continue
+
+		def digit_to_status(digit: str) -> LetterResult:
+			return {
+				'0': LetterResult.not_in_solution,
+				'1': LetterResult.wrong_position,
+				'2': LetterResult.correct,
+			}[digit]
+
+		status = tuple(digit_to_status(digit) for digit in user_input)
+
+		return GuessResult(status)
 
 
 def ask_yes_no(query_str: str, default: Optional[bool] = None) -> bool:

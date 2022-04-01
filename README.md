@@ -2,21 +2,18 @@
 
 ## Status
 
-So far, there's a basic solver. It does a pretty good job, but it's far from perfect - there are lots of TODO comments in the code where it could be improved.
-
-Right now it will only play its own internal game; there's no way (yet) to use this to solve along with a real game of Wordle.
-Though if you've already played a game of Wordle and want to see what the solver would have picked, you can run it with `-s <solution>` to have it play the same game.
+The solver does a pretty good job, but it's far from perfect - there are lots of TODO comments in the code where it could be improved (plus some more ideas in the rest of this README).
 
 ## How does it work?
 
 For the first guess, score words based on the most common letters in the list of possible solutions - 2 points if the letter is in the same position in a given solution and is the first occurence of this letter in the guess; 1 point if it's in a different position, or the same position but it's not the first occurence in a guess.
 
 For next guesses while there are still lots of solutions left, use the heuristic of which guess will best narrow down the remaining possible solutions.
-"Best" is difficult to quanitify here - there are a few different ways this could be chosen, such as worst-case (minimax), lowest average, or lowest mean-squared.
-Currently it uses a weighted score of minimax & average, weighted heavily toward minimax.
+"Best" is difficult to quanitify here, since we have to calculate this against every possible solution, and there are a few different ways this could be chosen, such as worst-case (minimax), lowest average, or lowest mean-squared.
+Currently it uses a weighted score heavily weighted toward minimax, with a little bit of average.
 
 This has an O(n^3) complexity, so when there are still many possible solutions remaining, we prune the search space.
-The main pruning is the list of possible guesses, based on which use the most common remaining letters.
+The main pruning is the list of possible guesses to check, which we prune based on which use the most common letters among remaining solutions.
 When the search space is very large, we also prune the list of possible solutions to check these guesses against.
 
 When there are fewer guesses than a certain limit, search recursively for which guess will take the fewest remaining guesses to solve (using a combination of average & minimax - more on this later).
@@ -68,7 +65,6 @@ But there's more that could be done to optimize this, such as using more numpy v
 There are various optimization parameters in the SolverParams dataclass, which can be tweaked to make different tradeoffs.
 So far, these have been chosen based on what seems make sense, not on actual results.
 There's a benchmarking/A-B testing mode that could be used to fine tune these parameters for best results, but so far I haven't done this.
-It's still a bit early to optimize these parameters - it doesn't really make sense to fine tune them now if there are more algorithm changes still to come.
 
 ## FAQ
 
@@ -91,13 +87,9 @@ However, there's still a problem with only using the full valid words list: it's
 This solver is much faster if it has fewer possible solutions it needs to look for.
 So in the end, I made it aware of the solutions list.
 But I left an option to run the original solution-list-agnostic idea, using the `--agnostic` argument.
-I may revisit which is the default behavior again in the future.
-
-Running `--benchmark` under the current default behavior (`-l 6`, which limits the search space to 1,000,000 combos per guess):
-* Without `--agnostic`, solves 100% (out of 50 puzzles), with an average of 3.46 guesses, worst case 5, average time 10.8 seconds per puzzle on my laptop
-* With `--agnostic`, still solves 100%, but the average goes up to 4.20 guesses, the worst case 6, and the average time 12.9 seconds (mostly due to needing more average guesses)
+I would like to revisit which is the default behavior again in the future.
 
 #### Why do green letters appear yellow, and yellow letters appear grey?
 
-This seems to be a problem with the default Windows Powershell colors.
-If using Windows, using cmd or WSL should give you the correct colors.
+This seems to be a problem with the default Windows Powershell terminal colors.
+If using Windows, using a different terminal such as cmd or WSL should give you the correct colors.

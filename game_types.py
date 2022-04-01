@@ -75,6 +75,9 @@ _test_result = GuessResult((
 assert GuessResult.from_int(GuessResult.as_int(_test_result)) == _test_result
 
 
+ALL_CORRECT = GuessResult(tuple(LetterResult.correct for _ in range(5)))
+
+
 @dataclass(frozen=True)
 class Word:
 	word: str

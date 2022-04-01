@@ -319,3 +319,99 @@ class Game:
 			elif turn_num >= 6 and not endless:
 				self.print('Failed, the solution was %s' % self.solution)
 				return 0
+
+
+class GameAssist:
+
+	silent = False
+
+	def __init__(
+			self,
+			solver: Solver):
+		self.solver = solver
+		self.guess_results = []
+		self.letter_status = LetterStatuses()
+
+	def print(self, *args, **kwargs):
+		if not self.silent:
+			print(*args, **kwargs)
+
+	def _get_guess_word(self, turn_num: int) -> Word:
+		self.letter_status.print_keyboard()
+		self.print()
+
+		extra_commands = dict()
+		extra_commands['num'] = (
+			lambda: self.print('%i possible solutions' % self.solver.get_num_possible_solutions()),
+			'Show number of possible solutions'
+		)
+		extra_commands['list'] = (
+			lambda: print_possible_solutions(solver=self.solver, max_num_to_print=None),
+			'List possible solutions'
+		)
+		extra_commands['stats'] = (
+			lambda: print_most_common_unsolved_letters(solver=self.solver),
+			'List most common unsolved letters'
+		)
+		extra_commands['solve'] = (
+			lambda: self.print("Solver's best guess is %s" % self.solver.get_best_guess()),
+			'Get guess from solver'
+		)
+		extra_commands['combos'] = (
+			lambda: print_all_letter_combos(self.guess_results),
+			'Print all letter combos'
+		)
+
+		guess = user_input.ask_word(turn_num, extra_commands=extra_commands)
+		guess = get_word_from_str(guess)
+		
+		return guess
+
+	def _get_guess(self, turn_num: int) -> GuessWithResult:
+		guess_word = self._get_guess_word(turn_num=turn_num)
+		result = user_input.ask_result()
+		return GuessWithResult(guess=guess_word, result=result)
+
+	def _handle_guess(self, guess: GuessWithResult) -> bool:
+		"""
+		:returns: true on success, false if guess was not valid
+		"""
+		try:
+			self.solver.add_guess(guess)
+		except ValueError as ex:
+			self.print(f'Invalid word or result: {ex}')
+			return False
+
+		self.letter_status.add_guess(guess)		
+		self.guess_results.append(guess)
+
+		self.print()
+		for n, guess_to_print in enumerate(self.guess_results):
+			self.print('%i: %s' % (n + 1, guess_to_print))
+		self.print()
+		return True
+
+	def play(self, endless=False):
+
+		self.print()
+
+		for turn_num in itertools.count(1):
+
+			valid_guess = False
+			while not valid_guess:
+				guess = self._get_guess(turn_num=turn_num)
+				valid_guess = self._handle_guess(guess)
+
+			if guess.result == ALL_CORRECT:
+				self.print('Success!')
+				return
+
+
+			if turn_num == 6 and endless:
+				self.print('Playing in endless mode - continuing after 6 guesses')
+				self.print()
+
+			elif turn_num >= 6 and not endless:
+				self.print('Failed')
+				print_possible_solutions(solver=self.solver)
+				return

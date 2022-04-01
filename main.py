@@ -12,7 +12,7 @@ import time
 from typing import Optional
 import random
 
-from game import Game
+from game import Game, GameAssist
 from game_types import *
 import matching
 from solver import Solver, SolverVerbosity, SolverParams
@@ -29,7 +29,7 @@ def parse_args():
 	default_params = SolverParams()
 
 	parser = argparse.ArgumentParser()
-	parser.add_argument('command', choices=['play', 'solve', 'benchmark', 'ab'], default=None, nargs='?')
+	parser.add_argument('command', choices=['play', 'assist', 'solve', 'benchmark', 'ab'], default=None, nargs='?')
 
 	group = parser.add_argument_group('Game')
 	group.add_argument('-s', dest='solution', type=str, default=None, help='Specify a solution')
@@ -70,10 +70,11 @@ def parse_args():
 			print()
 			args.command = [
 				'play',
+				'assist',
 				'solve',
 				'benchmark',
 				'ab',
-			][user_input.ask_choice('Select:', ['Play', 'Run solver', 'Run benchmarks', 'Run A/B tests'])]
+			][user_input.ask_choice('Select:', ['Play', 'Assist an external Wordle game', 'Run solver', 'Run benchmarks', 'Run A/B tests'])]
 
 	if args.num_benchmark is None:
 		args.num_benchmark = DEFAULT_NUM_BENCHMARK
@@ -449,7 +450,7 @@ def main():
 	elif args.command == 'ab':
 		benchmark(args, a_b_test=True)
 
-	elif args.command in ['play', 'solve']:
+	elif args.command in ['play', 'solve', 'assist']:
 
 		solver = Solver(
 			valid_solutions=(word_list.words if (args.all_words or args.agnostic) else word_list.solutions),
@@ -462,9 +463,14 @@ def main():
 			params=make_solver_params(args),
 		)
 
-		solution = pick_solution(args)
-		game = Game(solution=solution, solver=solver, silent=False, specified_guesses=args.guesses)
-		game.play(endless=args.endless, auto_solve=(args.command == 'solve'))
+		if args.command == 'assist':
+			game = GameAssist(solver=solver)
+			game.play()
+
+		else:
+			solution = pick_solution(args)
+			game = Game(solution=solution, solver=solver, silent=False, specified_guesses=args.guesses)
+			game.play(endless=args.endless, auto_solve=(args.command == 'solve'))
 
 	else:
 		raise AssertionError('Unknown command: %s' % args.command)
