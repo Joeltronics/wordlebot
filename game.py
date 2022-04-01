@@ -30,8 +30,8 @@ class LetterStatuses:
 		for row in rows:
 			print(''.join([self._format_char(ch) for ch in row]) + Style.RESET_ALL + ' ')
 
-	def add_guess(self, guess: GuessWithResult):
-		for character, status in zip(guess.guess, guess.result):
+	def add_guess(self, guess: Guess):
+		for character, status in guess:
 			assert character == character.upper()
 			if self.char_status[character].value < status.value:
 				self.char_status[character] = status
@@ -84,7 +84,7 @@ def print_most_common_unsolved_letters(solver):
 				''.join([letter.upper() for letter, frequency in position_counter.most_common()]))
 
 
-def print_all_letter_combos(guess_results: list[GuessWithResult]):
+def print_all_letter_combos(guesses: list[Guess]):
 
 	debug_print = False
 
@@ -94,8 +94,8 @@ def print_all_letter_combos(guess_results: list[GuessWithResult]):
 	green_letters = [None] * 5
 	unsolved_positions = set([0, 1, 2, 3, 4])
 
-	for result in guess_results:
-		for idx, (letter, result) in enumerate(zip(result.guess, result.result)):
+	for guess in guesses:
+		for idx, (letter, result) in enumerate(guess):
 			if result == LetterResult.correct:
 				green_letters[idx] = letter
 				if idx in unsolved_positions:
@@ -111,16 +111,13 @@ def print_all_letter_combos(guess_results: list[GuessWithResult]):
 
 	yellow_letters = dict()
 
-	for guess_result in guess_results:
+	for guess in guesses:
 
-		guess = guess_result.guess
-		result = guess_result.result
-
-		unique_letters = set(guess.word)
+		unique_letters = set(guess.word.word)
 		for letter in unique_letters:
 
 			letter_and_status = [
-				(idx, status) for idx, (l, status) in enumerate(zip(guess, result)) if l == letter
+				(idx, status) for idx, (l, status) in enumerate(guess) if l == letter
 			]
 
 			assert len(letter_and_status) > 0
@@ -202,7 +199,7 @@ class Game:
 		self.solution = solution
 		self.solver = solver
 		self.silent = silent
-		self.guess_results = []
+		self.guesses = []
 
 		if specified_guesses is None:
 			self.specified_guesses = []
@@ -274,27 +271,24 @@ class Game:
 				'Get guess from solver'
 			)
 			extra_commands['combos'] = (
-				lambda: print_all_letter_combos(self.guess_results),
+				lambda: print_all_letter_combos(self.guesses),
 				'Print all letter combos'
 			)
 
 		return user_input.ask_word(turn_num, extra_commands=extra_commands)
 
-	def _handle_guess(self, guess: Word):
+	def _handle_guess(self, guess: Guess):
 
-		result = matching.get_guess_result(guess=guess, solution=self.solution)
-		guess_with_result = GuessWithResult(guess=guess, result=result)
-
-		self.guess_results.append(guess_with_result)
+		self.guesses.append(guess)
 
 		if self.letter_status is not None:
-			self.letter_status.add_guess(guess_with_result)
+			self.letter_status.add_guess(guess)
 
 		if self.solver is not None:
-			self.solver.add_guess(guess_with_result)
+			self.solver.add_guess(guess)
 
 		self.print()
-		for n, guess_to_print in enumerate(self.guess_results):
+		for n, guess_to_print in enumerate(self.guesses):
 			self.print('%i: %s' % (n + 1, guess_to_print))
 		self.print()
 
@@ -307,10 +301,12 @@ class Game:
 
 		for turn_num in itertools.count(1):
 
-			guess = self._get_guess(turn_num=turn_num, auto_solve=auto_solve)
+			guess_word = self._get_guess(turn_num=turn_num, auto_solve=auto_solve)
+			result = matching.get_word_result(guess=guess_word, solution=self.solution)
+			guess = Guess(word=guess_word, result=result)
 			self._handle_guess(guess)
 
-			if guess == self.solution:
+			if guess_word == self.solution:
 				self.print('Success!')
 				return turn_num
 
@@ -331,7 +327,7 @@ class GameAssist:
 			self,
 			solver: Solver):
 		self.solver = solver
-		self.guess_results = []
+		self.guesses = []
 		self.letter_status = LetterStatuses()
 
 	def print(self, *args, **kwargs):
@@ -360,18 +356,18 @@ class GameAssist:
 			'Get guess from solver'
 		)
 		extra_commands['combos'] = (
-			lambda: print_all_letter_combos(self.guess_results),
+			lambda: print_all_letter_combos(self.guesses),
 			'Print all letter combos'
 		)
 
 		return user_input.ask_word(turn_num, extra_commands=extra_commands)
 
-	def _get_guess(self, turn_num: int) -> GuessWithResult:
+	def _get_guess(self, turn_num: int) -> Guess:
 		guess_word = self._get_guess_word(turn_num=turn_num)
 		result = user_input.ask_result()
-		return GuessWithResult(guess=guess_word, result=result)
+		return Guess(word=guess_word, result=result)
 
-	def _handle_guess(self, guess: GuessWithResult) -> bool:
+	def _handle_guess(self, guess: Guess) -> bool:
 		"""
 		:returns: true on success, false if guess was not valid
 		"""
@@ -382,10 +378,10 @@ class GameAssist:
 			return False
 
 		self.letter_status.add_guess(guess)		
-		self.guess_results.append(guess)
+		self.guesses.append(guess)
 
 		self.print()
-		for n, guess_to_print in enumerate(self.guess_results):
+		for n, guess_to_print in enumerate(self.guesses):
 			self.print('%i: %s' % (n + 1, guess_to_print))
 		self.print()
 		return True

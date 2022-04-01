@@ -68,7 +68,7 @@ class MatchingLookupTable:
 				for solution_idx, solution in enumerate(possible_solutions):
 					solution = word_list.get_word_by_idx(solution_idx)
 					assert solution.index == solution_idx
-					result = _calculate_guess_result(guess=guess, solution=solution)
+					result = _calculate_word_result(guess=guess, solution=solution)
 					result_as_int = result.as_int()
 					assert 0 <= result_as_int < (2**16 - 1)
 					self.lut[guess_idx, solution_idx] = result_as_int
@@ -86,7 +86,7 @@ class MatchingLookupTable:
 				for guess_idx, guess in enumerate(possible_guesses):
 					assert guess.index == guess_idx
 					guess = word_list.get_word_by_idx(guess_idx)
-					result = _calculate_guess_result(guess=guess, solution=solution)
+					result = _calculate_word_result(guess=guess, solution=solution)
 					result_as_int = result.as_int()
 					assert 0 <= result_as_int < (2**16 - 1)
 					self.lut[solution_idx, guess_idx] = result_as_int
@@ -105,13 +105,13 @@ class MatchingLookupTable:
 		else:
 			return int(self.lut[solution.index, guess.index])
 
-	def lookup(self, guess: Word, solution: Word) -> GuessResult:
-		return GuessResult.from_int(self.lookup_as_int(guess=guess, solution=solution))
+	def lookup(self, guess: Word, solution: Word) -> WordResult:
+		return WordResult.from_int(self.lookup_as_int(guess=guess, solution=solution))
 
-	def get_guess_result(self, guess: Word, solution: Word) -> GuessResult:
+	def get_word_result(self, guess: Word, solution: Word) -> WordResult:
 		return self.lookup(guess=guess, solution=solution)
 
-	def get_guess_result_as_int(self, guess: Word, solution: Word) -> int:
+	def get_word_result_as_int(self, guess: Word, solution: Word) -> int:
 		return self.lookup_as_int(guess=guess, solution=solution)
 
 	def solutions_remaining(self, guess: Word, possible_solution: Word, solutions: Iterable[Word], return_result=False) -> list[Word]:
@@ -125,7 +125,7 @@ class MatchingLookupTable:
 		]
 
 		if return_result:
-			return new_possible_solutions, GuessResult.from_int(result_int)
+			return new_possible_solutions, WordResult.from_int(result_int)
 		else:
 			return new_possible_solutions
 
@@ -143,7 +143,7 @@ class MatchingLookupTable:
 _lut = MatchingLookupTable()
 
 
-def _calculate_guess_result(guess: Word, solution: Word) -> GuessResult:
+def _calculate_word_result(guess: Word, solution: Word) -> WordResult:
 
 	results = [None for _ in range(5)]
 
@@ -171,7 +171,7 @@ def _calculate_guess_result(guess: Word, solution: Word) -> GuessResult:
 				results[n] = LetterResult.not_in_solution
 
 	assert not any([result is None for result in results])
-	return GuessResult(tuple(results))
+	return WordResult(tuple(results))
 
 
 def init_lut():
@@ -199,21 +199,21 @@ def init_lut():
 	print('Complete')
 
 
-def get_guess_result(guess: Word, solution: Word) -> GuessResult:
+def get_word_result(guess: Word, solution: Word) -> WordResult:
 	if _lut.is_init():
 		return _lut.lookup(guess=guess, solution=solution)
 	else:
-		return _calculate_guess_result(guess=guess, solution=solution)
+		return _calculate_word_result(guess=guess, solution=solution)
 
 
-def is_valid_for_guess(word: Word, guess: GuessWithResult) -> bool:
-	result_if_this_is_solution = get_guess_result(guess=guess.guess, solution=word)
+def is_valid_for_guess(word: Word, guess: Guess) -> bool:
+	result_if_this_is_solution = get_word_result(guess=guess.word, solution=word)
 	return result_if_this_is_solution == guess.result
 
 
 def solutions_remaining(
 		guess: Word, possible_solution: Word, solutions: Iterable[Word], return_result=False
-) -> Union[list[Word], tuple[list[Word], GuessResult]]:
+) -> Union[list[Word], tuple[list[Word], WordResult]]:
 	"""
 	If we guess this word, and see this result, figure out which words remain
 	"""
@@ -227,10 +227,10 @@ def solutions_remaining(
 		)
 
 	else:
-		result = _calculate_guess_result(guess, possible_solution)
+		result = _calculate_word_result(guess, possible_solution)
 		new_possible_solutions = [
 			word for word in solutions
-			if _calculate_guess_result(guess=guess, solution=word) == result
+			if _calculate_word_result(guess=guess, solution=word) == result
 		]
 
 		if return_result:
@@ -252,9 +252,9 @@ def num_solutions_remaining(guess: Word, possible_solution: Word, solutions: Ite
 		)
 
 	else:
-		result = _calculate_guess_result(guess, possible_solution)
+		result = _calculate_word_result(guess, possible_solution)
 		return sum(
-			_calculate_guess_result(guess=guess, solution=word) == result
+			_calculate_word_result(guess=guess, solution=word) == result
 			for word in solutions
 		)
 
@@ -262,13 +262,13 @@ def num_solutions_remaining(guess: Word, possible_solution: Word, solutions: Ite
 # Inline unit tests
 
 # Basic
-assert _calculate_guess_result(solution=Word('ABCDE', 1), guess=Word('FGHIJ', 2)) == GuessResult((
+assert _calculate_word_result(solution=Word('ABCDE', 1), guess=Word('FGHIJ', 2)) == WordResult((
 	LetterResult.not_in_solution,
 	LetterResult.not_in_solution,
 	LetterResult.not_in_solution,
 	LetterResult.not_in_solution,
 	LetterResult.not_in_solution))
-assert _calculate_guess_result(solution=Word('ABCDE', 1), guess=Word('ACXYZ', 2)) == GuessResult((
+assert _calculate_word_result(solution=Word('ABCDE', 1), guess=Word('ACXYZ', 2)) == WordResult((
 	LetterResult.correct,
 	LetterResult.wrong_position,
 	LetterResult.not_in_solution,
@@ -276,19 +276,19 @@ assert _calculate_guess_result(solution=Word('ABCDE', 1), guess=Word('ACXYZ', 2)
 	LetterResult.not_in_solution))
 
 # "multiple of same letter" logic
-assert _calculate_guess_result(solution=Word('MOUNT', 1), guess=Word('BOOKS', 2)) == GuessResult((
+assert _calculate_word_result(solution=Word('MOUNT', 1), guess=Word('BOOKS', 2)) == WordResult((
 	LetterResult.not_in_solution,
 	LetterResult.correct,
 	LetterResult.not_in_solution,
 	LetterResult.not_in_solution,
 	LetterResult.not_in_solution))
-assert _calculate_guess_result(solution=Word('MOUNT', 1), guess=Word('BROOK', 2)) == GuessResult((
+assert _calculate_word_result(solution=Word('MOUNT', 1), guess=Word('BROOK', 2)) == WordResult((
 	LetterResult.not_in_solution,
 	LetterResult.not_in_solution,
 	LetterResult.wrong_position,
 	LetterResult.not_in_solution,
 	LetterResult.not_in_solution))
-assert _calculate_guess_result(solution=Word('BOOKS', 1), guess=Word('BROOK', 2)) == GuessResult((
+assert _calculate_word_result(solution=Word('BOOKS', 1), guess=Word('BROOK', 2)) == WordResult((
 	LetterResult.correct,
 	LetterResult.not_in_solution,
 	LetterResult.correct,

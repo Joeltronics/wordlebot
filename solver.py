@@ -122,7 +122,7 @@ class Solver:
 			matching.is_valid_for_guess(word, guess) for guess in self.guesses
 		])
 
-	def add_guess(self, guess: GuessWithResult):
+	def add_guess(self, guess: Guess):
 
 		possible_solutions = {word for word in self.possible_solutions if matching.is_valid_for_guess(word, guess)}
 		if len(possible_solutions) == 0:
@@ -136,7 +136,7 @@ class Solver:
 		# However, I suspect this is unlikely to actually make much of a difference in practice
 		for idx in range(5):
 			if guess.result[idx] == LetterResult.correct:
-				self.solved_letters[idx] = guess.guess[idx]
+				self.solved_letters[idx] = guess.word[idx]
 
 	def get_unsolved_letters_counter(self, possible_solutions: Optional[list[str]] = None, per_position=False):
 
@@ -698,7 +698,7 @@ class Solver:
 				)
 
 				if self.one_line_print:
-					this_recursive_log_str = recursive_log_str + ' ' + format_guess(guess, result)
+					this_recursive_log_str = recursive_log_str + ' ' + str(Guess(word=guess, result=result))
 					self.print_progress(this_recursive_log_str)
 				else:
 					this_recursive_log_str = ''

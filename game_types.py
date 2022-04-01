@@ -34,7 +34,7 @@ assert all([0 <= result.value < 4 for result in LetterResult])
 
 
 @dataclass(frozen=True)
-class GuessResult:
+class WordResult:
 	_char_results: tuple[LetterResult, LetterResult, LetterResult, LetterResult, LetterResult]
 
 	def as_int(self) -> int:
@@ -47,7 +47,7 @@ class GuessResult:
 
 	@classmethod
 	def from_int(cls, as_int: int):
-		return GuessResult((
+		return WordResult((
 			LetterResult((as_int & 0x300) >> 8),
 			LetterResult((as_int & 0x0C0) >> 6),
 			LetterResult((as_int & 0x030) >> 4),
@@ -66,16 +66,16 @@ class GuessResult:
 
 
 # Test integer conversions
-_test_result = GuessResult((
+_test_result = WordResult((
 	LetterResult.correct,
 	LetterResult.not_in_solution,
 	LetterResult.correct,
 	LetterResult.wrong_position,
 	LetterResult.wrong_position))
-assert GuessResult.from_int(GuessResult.as_int(_test_result)) == _test_result
+assert WordResult.from_int(WordResult.as_int(_test_result)) == _test_result
 
 
-ALL_CORRECT = GuessResult(tuple(LetterResult.correct for _ in range(5)))
+ALL_CORRECT = WordResult(tuple(LetterResult.correct for _ in range(5)))
 
 
 @dataclass(frozen=True)
@@ -126,15 +126,17 @@ class Word:
 
 
 @dataclass(frozen=True)
-class GuessWithResult:
-	guess: Word
-	result: GuessResult
+class Guess:
+	word: Word
+	result: WordResult
 
 	def __str__(self):
 		return ''.join([
-			char_char_results.get_format() + character for character, char_char_results in zip(self.guess, self.result)
+			char_result.get_format() + character for character, char_result in zip(self.word, self.result)
 		]) + Style.RESET_ALL
 
+	def __iter__(self):
+		return zip(self.word, self.result).__iter__()
 
-def format_guess(guess: Word, result: GuessResult) -> str:
-	return str(GuessWithResult(guess=guess, result=result))
+	def __next__(self):
+		return zip(self.word, self.result).__next__()

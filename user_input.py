@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 from typing import Optional, Callable
-from game_types import GuessResult, LetterResult, Word
+from game_types import WordResult, LetterResult, Word
 
 import word_list
 
@@ -71,7 +71,7 @@ def ask_word(guess_num: int, extra_commands: Optional[dict[str, tuple[Callable, 
 		return word_list.get_word_from_str(guess)
 
 
-def ask_result() -> GuessResult:
+def ask_result() -> WordResult:
 	while True:
 
 		user_input = input('Enter result - 0=grey, 1=yellow, 2=green: ').strip()
@@ -95,7 +95,7 @@ def ask_result() -> GuessResult:
 
 		status = tuple(digit_to_status(digit) for digit in user_input)
 
-		return GuessResult(status)
+		return WordResult(status)
 
 
 def ask_yes_no(query_str: str, default: Optional[bool] = None) -> bool:
