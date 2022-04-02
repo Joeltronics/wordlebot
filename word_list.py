@@ -100,13 +100,13 @@ def init(use_nyt_lists=False):
 	assert _all_unique([item.index for item in words])
 
 
-def get_word_from_str(word_str: str) -> Word:
+def get_word_from_str(word_str: str, force=False) -> Word:
 	word_str = word_str.upper()
 	for word in words:
 		if word == word_str:
 			return word
 	else:
-		raise KeyError(word_str)
+		raise KeyError(f'Invalid word: {word_str}')
 
 
 def get_word_by_idx(word_idx: int) -> Word:

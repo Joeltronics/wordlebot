@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 from typing import Optional, Callable
-from game_types import GuessResult, LetterResult
+from game_types import GuessResult, LetterResult, Word
 
 import word_list
 
@@ -11,7 +11,7 @@ _truthy_words = ['y', 'yes', '1', 'true']
 _exit_words = ['q', 'x', 'quit', 'exit']
 
 
-def ask_word(guess_num: int, extra_commands: Optional[dict[str, tuple[Callable, str]]]=None) -> str:
+def ask_word(guess_num: int, extra_commands: Optional[dict[str, tuple[Callable, str]]]=None) -> Word:
 
 	while True:
 		if guess_num <= 6:
@@ -63,11 +63,12 @@ def ask_word(guess_num: int, extra_commands: Optional[dict[str, tuple[Callable, 
 		if guess not in word_list.words:
 			if allow_invalid:
 				print('Allowing invalid word "%s" because you yelled it' % guess.upper())
+				return Word(word=guess, index=None)
 			else:
 				print('Invalid word: %s' % guess.upper())
 				continue
 
-		return guess
+		return word_list.get_word_from_str(guess)
 
 
 def ask_result() -> GuessResult:

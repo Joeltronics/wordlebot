@@ -81,7 +81,7 @@ ALL_CORRECT = GuessResult(tuple(LetterResult.correct for _ in range(5)))
 @dataclass(frozen=True)
 class Word:
 	word: str
-	index: int
+	index: Optional[int]
 
 	def __post_init__(self):
 		if len(self.word) != 5:
@@ -113,7 +113,7 @@ class Word:
 			raise TypeError()
 
 	def __hash__(self) -> int:
-		return self.index
+		return self.word.__hash__()
 
 	def __iter__(self):
 		return self.word.__iter__()
@@ -122,7 +122,7 @@ class Word:
 		return self.word.__next__()
 
 	def __getitem__(self, idx: int):
-		return self.word[idx]
+		return self.word.__getitem__(idx)
 
 
 @dataclass(frozen=True)

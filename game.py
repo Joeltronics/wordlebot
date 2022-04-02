@@ -8,7 +8,7 @@ from game_types import *
 import matching
 from solver import Solver
 import user_input
-from word_list import get_word_from_str
+from word_list import get_word_from_str, words
 
 
 class LetterStatuses:
@@ -232,7 +232,12 @@ class Game:
 
 		if specified_guess:
 			self.print('Using specified guess: %s' % specified_guess)
-			return get_word_from_str(specified_guess)
+
+			if specified_guess in words:
+				return get_word_from_str(specified_guess)
+			else:
+				print(f'WARNING: "{specified_guess}" is not in valid words list - attempting anyway!')
+				return Word(specified_guess, index=None)
 
 		if auto_solve:
 			if self.solver is None:
@@ -273,10 +278,7 @@ class Game:
 				'Print all letter combos'
 			)
 
-		guess = user_input.ask_word(turn_num, extra_commands=extra_commands)
-		guess = get_word_from_str(guess)
-		
-		return guess
+		return user_input.ask_word(turn_num, extra_commands=extra_commands)
 
 	def _handle_guess(self, guess: Word):
 
@@ -362,10 +364,7 @@ class GameAssist:
 			'Print all letter combos'
 		)
 
-		guess = user_input.ask_word(turn_num, extra_commands=extra_commands)
-		guess = get_word_from_str(guess)
-		
-		return guess
+		return user_input.ask_word(turn_num, extra_commands=extra_commands)
 
 	def _get_guess(self, turn_num: int) -> GuessWithResult:
 		guess_word = self._get_guess_word(turn_num=turn_num)
