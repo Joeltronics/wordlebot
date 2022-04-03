@@ -29,7 +29,9 @@ def parse_args():
 	default_params = SolverParams()
 
 	parser = argparse.ArgumentParser()
-	parser.add_argument('command', choices=['play', 'assist', 'solve', 'benchmark', 'ab'], default=None, nargs='?')
+	parser.add_argument(
+		'command', choices=['play', 'assist', 'solve', 'benchmark', 'ab'], default=None, nargs='?',
+		help='play: Play game; assist: Assist an external Wordle game; solve: Run solver on its own; benchmark: Run benchmark tests; ab: Run a/b tests')
 
 	group = parser.add_argument_group('Game')
 	group.add_argument('-s', dest='solution', type=str, default=None, help='Specify a solution')
@@ -67,14 +69,13 @@ def parse_args():
 		if args.num_benchmark is not None:
 			args.command = 'benchmark'
 		else:
-			print()
 			args.command = [
 				'play',
 				'assist',
 				'solve',
 				'benchmark',
 				'ab',
-			][user_input.ask_choice('Select:', ['Play', 'Assist an external Wordle game', 'Run solver', 'Run benchmarks', 'Run A/B tests'])]
+			][user_input.ask_choice('Select:', ['Play', 'Assist an external Wordle game', 'Run solver on its own', 'Run benchmarks', 'Run A/B tests'])]
 
 	if args.num_benchmark is None:
 		args.num_benchmark = DEFAULT_NUM_BENCHMARK
@@ -435,7 +436,18 @@ def benchmark(args, a_b_test: bool):
 
 
 def main():
-	print('Wordle solver')
+
+	print()
+	print('  %sW%sO%sR%sD%sL%sE%s ' % (
+		LetterResult.not_in_solution.get_format(),
+		LetterResult.correct.get_format(),
+		LetterResult.wrong_position.get_format(),
+		LetterResult.not_in_solution.get_format(),
+		LetterResult.wrong_position.get_format(),
+		LetterResult.wrong_position.get_format(),
+		Style.RESET_ALL))
+	print('  %sSOLVER%s ' % (LetterResult.correct.get_format(), Style.RESET_ALL))
+	print()
 
 	args = parse_args()
 
