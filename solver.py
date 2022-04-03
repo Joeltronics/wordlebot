@@ -690,17 +690,21 @@ class Solver:
 
 				len_at_start_of_loop = len(remaining_possible_solutions)
 
-				possible_solutions_this_guess, result = matching.solutions_remaining(
-					guess=guess,
-					possible_solution=remaining_possible_solutions[0],
-					solutions=possible_solutions,
-					return_result=True,
-				)
-
 				if self.one_line_print:
+					result, possible_solutions_this_guess = matching.get_word_result_and_solutions_remaining(
+						guess=guess,
+						possible_solution=remaining_possible_solutions[0],
+						solutions=possible_solutions,
+					)
+
 					this_recursive_log_str = recursive_log_str + ' ' + str(Guess(word=guess, result=result))
 					self.print_progress(this_recursive_log_str)
 				else:
+					possible_solutions_this_guess = matching.solutions_remaining(
+						guess=guess,
+						possible_solution=remaining_possible_solutions[0],
+						solutions=possible_solutions,
+					)
 					this_recursive_log_str = ''
 
 				assert len(possible_solutions_this_guess) > 0

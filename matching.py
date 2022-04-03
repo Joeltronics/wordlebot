@@ -7,7 +7,8 @@ import word_list
 import numpy as np
 import sys
 import os
-from typing import Iterable, Union
+from typing import Iterable
+
 
 GUESS_MAJOR = True
 
@@ -114,7 +115,7 @@ class MatchingLookupTable:
 	def get_word_result_as_int(self, guess: Word, solution: Word) -> int:
 		return self.lookup_as_int(guess=guess, solution=solution)
 
-	def solutions_remaining(self, guess: Word, possible_solution: Word, solutions: Iterable[Word], return_result=False) -> list[Word]:
+	def get_word_result_and_solutions_remaining(self, guess: Word, possible_solution: Word, solutions: Iterable[Word]) -> tuple[WordResult, list[Word]]:
 		"""
 		If we guess this word, and see this result, figure out which words remain
 		"""
@@ -124,10 +125,19 @@ class MatchingLookupTable:
 			if self.lookup_as_int(guess=guess, solution=word) == result_int
 		]
 
-		if return_result:
-			return new_possible_solutions, WordResult.from_int(result_int)
-		else:
-			return new_possible_solutions
+		return WordResult.from_int(result_int), new_possible_solutions
+
+	def solutions_remaining(self, guess: Word, possible_solution: Word, solutions: Iterable[Word]) -> list[Word]:
+		"""
+		If we guess this word, and see this result, figure out which words remain
+		"""
+		result_int = self.lookup_as_int(guess=guess, solution=possible_solution)
+		new_possible_solutions = [
+			word for word in solutions
+			if self.lookup_as_int(guess=guess, solution=word) == result_int
+		]
+
+		return new_possible_solutions
 
 	def num_solutions_remaining(self, guess: Word, possible_solution: Word, solutions: Iterable[Word]) -> int:
 		"""
@@ -211,9 +221,24 @@ def is_valid_for_guess(word: Word, guess: Guess) -> bool:
 	return result_if_this_is_solution == guess.result
 
 
-def solutions_remaining(
-		guess: Word, possible_solution: Word, solutions: Iterable[Word], return_result=False
-) -> Union[list[Word], tuple[list[Word], WordResult]]:
+def get_word_result_and_solutions_remaining(guess: Word, possible_solution: Word, solutions: Iterable[Word]) -> tuple[WordResult, list[Word]]:
+	if _lut.is_init():
+		return _lut.get_word_result_and_solutions_remaining(
+			guess=guess,
+			possible_solution=possible_solution,
+			solutions=solutions,
+		)
+	else:
+		result = _calculate_word_result(guess, possible_solution)
+		new_possible_solutions = [
+			word for word in solutions
+			if _calculate_word_result(guess=guess, solution=word) == result
+		]
+
+		return result, new_possible_solutions
+
+
+def solutions_remaining(guess: Word, possible_solution: Word, solutions: Iterable[Word]) -> list[Word]:
 	"""
 	If we guess this word, and see this result, figure out which words remain
 	"""
@@ -223,7 +248,6 @@ def solutions_remaining(
 			guess=guess,
 			possible_solution=possible_solution,
 			solutions=solutions,
-			return_result=return_result,
 		)
 
 	else:
@@ -233,10 +257,7 @@ def solutions_remaining(
 			if _calculate_word_result(guess=guess, solution=word) == result
 		]
 
-		if return_result:
-			return new_possible_solutions, result
-		else:
-			return new_possible_solutions
+		return new_possible_solutions
 
 
 def num_solutions_remaining(guess: Word, possible_solution: Word, solutions: Iterable[Word]) -> int:
