@@ -10,6 +10,7 @@ import sys
 from typing import Iterable, Optional, Union
 
 from game_types import *
+from game_state import GameState
 import matching
 
 
@@ -74,20 +75,17 @@ def clip(value, range):
 class Solver:
 	def __init__(
 			self,
-			valid_solutions: Iterable[Word],
-			allowed_words: Iterable[Word],
+			possible_solutions: set[Word],
+			allowed_words: set[Word],
 			complexity_limit: int,
 			params=SolverParams(),
 			verbosity=SolverVerbosity.regular):
 
-		self.possible_solutions = set(valid_solutions)
-		self.allowed_words = set(allowed_words)
+		self.game_state = GameState(allowed_words=allowed_words, possible_solutions=possible_solutions)
+
 		self.complexity_limit = complexity_limit
 		self.params = params
 		self.verbosity = verbosity
-
-		self.guesses = []
-		self.solved_letters = [None] * 5
 
 		self.one_line_print = sys.stdout.isatty() and self.verbosity == SolverVerbosity.regular
 
@@ -111,65 +109,13 @@ class Solver:
 	def dprint(self, *args, **kwargs) -> None:
 		self.print_level(SolverVerbosity.debug, *args, **kwargs)
 
-	def get_num_possible_solutions(self) -> int:
-		return len(self.possible_solutions)
-
-	def get_possible_solitions(self) -> list[str]:
-		return self.possible_solutions
-
 	def _is_valid(self, word: str) -> bool:
 		return all([
-			matching.is_valid_for_guess(word, guess) for guess in self.guesses
+			matching.is_valid_for_guess(word, guess) for guess in self.game_state.guesses
 		])
 
 	def add_guess(self, guess: Guess):
-
-		possible_solutions = {word for word in self.possible_solutions if matching.is_valid_for_guess(word, guess)}
-		if len(possible_solutions) == 0:
-			raise ValueError('This guess result does not leave any possible solutions!')
-
-		self.possible_solutions = possible_solutions
-		self.guesses.append(guess)
-
-		# TODO: in theory, could use process of elimination to sometimes guarantee position from yellow letters
-		# A simple way to do this would be to look at remaining possible solutions instead of past letter results
-		# However, I suspect this is unlikely to actually make much of a difference in practice
-		for idx in range(5):
-			if guess.result[idx] == LetterResult.correct:
-				self.solved_letters[idx] = guess.word[idx]
-
-	def get_unsolved_letters_counter(self, possible_solutions: Optional[list[str]] = None, per_position=False):
-
-		def _remove_solved_letters(word):
-			return ''.join([
-				letter if (solved_letter is None or letter != solved_letter) else ''
-				for letter, solved_letter in zip(word, self.solved_letters)
-			])
-
-		if possible_solutions is None:
-			possible_solutions = self.possible_solutions
-
-		words_solved_chars_removed = [_remove_solved_letters(word) for word in possible_solutions]
-		all_chars = ''.join(words_solved_chars_removed)
-		counter = collections.Counter(all_chars)
-
-		if not per_position:
-			return counter
-
-		position_counters = [None for _ in range(5)]
-
-		for position_idx in range(5):
-			if self.solved_letters[position_idx] is not None:
-				continue
-
-			position_counters[position_idx] = collections.Counter([
-				word[position_idx] for word in possible_solutions
-			])
-
-		return counter, position_counters
-
-	def get_most_common_unsolved_letters(self):
-		return self.get_unsolved_letters_counter().most_common()
+		self.game_state.add_guess(guess)
 
 	def _preliminary_score_guesses(
 			self,
@@ -183,7 +129,7 @@ class Solver:
 		"""
 
 		if positional:
-			counter_overall, counters_per_position = self.get_unsolved_letters_counter(per_position=True, possible_solutions=possible_solutions)
+			counter_overall, counters_per_position = self.game_state.get_unsolved_letters_counter(per_position=True, possible_solutions=possible_solutions)
 			def _score(word):
 
 				score_unique_letters = sum([
@@ -201,7 +147,7 @@ class Solver:
 
 				return score_unique_letters + score_positional
 		else:
-			counter = self.get_unsolved_letters_counter(possible_solutions=possible_solutions)
+			counter = self.game_state.get_unsolved_letters_counter()
 			def _score(word):
 				return sum([counter[unique_letter] for unique_letter in set(word)])
 
@@ -214,7 +160,7 @@ class Solver:
 			guesses.sort(key=lambda guess_and_score: guess_and_score[1], reverse=True)
 
 		if debug_log:
-			num_solutions = len(self.possible_solutions)
+			num_solutions = len(self.game_state.get_possible_solutions())
 			if len(guesses) > 10:
 				self.print_level(SolverVerbosity.debug, 'Best guesses:')
 				for guess, score in guesses[:5]:
@@ -267,8 +213,8 @@ class Solver:
 		:return: (number of guesses, divisor for solutions to check possible, divisor for solutions to check remaining)
 		"""
 
-		num_allowed_words = len(self.allowed_words)
-		num_possible_solutions = len(self.possible_solutions)
+		num_allowed_words = len(self.game_state.allowed_words)
+		num_possible_solutions = len(self.game_state.get_possible_solutions())
 		total_num_matches = num_allowed_words * num_possible_solutions * num_possible_solutions
 
 		if max_num_matches is None:
@@ -328,10 +274,10 @@ class Solver:
 
 	def _log_pruning(self, num_guesses_to_try, divide_solutions_to_check_possible, divide_solutions_to_check_num_remaining) -> None:
 
-		num_possible_guesses = len(self.allowed_words)
-		num_possible_solutions = len(self.possible_solutions)
+		num_possible_guesses = len(self.game_state.allowed_words)
+		num_possible_solutions = len(self.game_state.get_possible_solutions())
 
-		total_num_matches = len(self.allowed_words) * num_possible_solutions * num_possible_solutions
+		total_num_matches = len(self.game_state.allowed_words) * num_possible_solutions * num_possible_solutions
 		num_solutions_to_check_possible = num_possible_solutions // divide_solutions_to_check_possible
 		num_solutions_to_check_num_remaining = num_possible_solutions // divide_solutions_to_check_num_remaining
 
@@ -351,7 +297,7 @@ class Solver:
 		elif num_guesses_to_try < num_possible_guesses:
 			self.print(
 				f'Checking {num_guesses_to_try:,}/{num_possible_guesses:,} guesses' +
-				f' ({num_guesses_to_try / len(self.allowed_words) * 100.0:.1f}%)' +
+				f' ({num_guesses_to_try / len(self.game_state.allowed_words) * 100.0:.1f}%)' +
 				f' against all {num_possible_solutions:,} solutions' +
 				f' ({num_matches_to_check:,}/{total_num_matches:,} total matches)...'
 			)
@@ -376,7 +322,7 @@ class Solver:
 		# Figure out how much to prune
 
 		if max_num_matches is None:
-			num_guesses_to_try = len(self.possible_solutions)
+			num_guesses_to_try = len(self.game_state.get_possible_solutions())
 			divide_solutions_to_check_possible = 1
 			divide_solutions_to_check_num_remaining= 1
 		else:
@@ -385,7 +331,7 @@ class Solver:
 
 		# Do the pruning
 
-		guesses_to_try = list(self.allowed_words)
+		guesses_to_try = list(self.game_state.allowed_words)
 		guesses_to_try = self._prune_and_sort_guesses(
 			guesses_to_try,
 			num_guesses_to_try if len(guesses_to_try) > num_guesses_to_try else None,
@@ -400,7 +346,7 @@ class Solver:
 		
 		TODO: smarter pruning than this
 		"""
-		solutions_sorted = sorted(list(self.possible_solutions))
+		solutions_sorted = sorted(list(self.game_state.get_possible_solutions()))
 
 		solutions_to_check_possible = solutions_sorted
 		if divide_solutions_to_check_possible > 1:
@@ -473,14 +419,14 @@ class Solver:
 			) -> tuple[str, float]:
 
 		if solutions_to_check_possible is None:
-			solutions_to_check_possible = self.possible_solutions
+			solutions_to_check_possible = self.game_state.get_possible_solutions()
 
 		if solutions_to_check_num_remaining is None:
-			solutions_to_check_num_remaining = self.possible_solutions
+			solutions_to_check_num_remaining = self.game_state.get_possible_solutions()
 
-		assert len(solutions_to_check_num_remaining) <= len(self.possible_solutions)
-		limited_solutions_to_check_possible = len(self.possible_solutions) != len(solutions_to_check_num_remaining)
-		solutions_to_check_possible_ratio = len(self.possible_solutions) / len(solutions_to_check_num_remaining)
+		assert len(solutions_to_check_num_remaining) <= len(self.game_state.get_possible_solutions())
+		limited_solutions_to_check_possible = len(self.game_state.get_possible_solutions()) != len(solutions_to_check_num_remaining)
+		solutions_to_check_possible_ratio = len(self.game_state.get_possible_solutions()) / len(solutions_to_check_num_remaining)
 		assert solutions_to_check_possible_ratio >= 1.0
 
 		# Take every possible valid guess, and run it against every possible remaining valid word
@@ -495,7 +441,7 @@ class Solver:
 			if (guess_idx + 1) % 200 == 0:
 				self.dprint('%i/%i...' % (guess_idx + 1, len(guesses)))
 
-			is_possible_solution = guess in self.possible_solutions
+			is_possible_solution = guess in self.game_state.get_possible_solutions()
 
 			score, max_words_remaining, mean_words_remaining, mean_squared_words_remaining = \
 				self._score_guess_fewest_remaining_words(
@@ -560,7 +506,7 @@ class Solver:
 
 		# TODO: find a way to limit complexity to get consistent time performance out of this
 
-		solutions_sorted = sorted(list(self.possible_solutions))
+		solutions_sorted = sorted(list(self.game_state.get_possible_solutions()))
 		num_possible_solutions = len(solutions_sorted)
 
 		# FIXME: this is duplicate logic with _determine_guesses_for_recursive_solving
@@ -613,7 +559,7 @@ class Solver:
 		# then it's not worth checking 17 non-solutions, so just check 3 solutions + the top 3 non-solutions
 		num_non_solutions_to_try = min(num_guesses_to_try - total_num_possible_solutions, total_num_possible_solutions)
 
-		non_solution_guesses_to_try = list(self.allowed_words - set(possible_solutions))
+		non_solution_guesses_to_try = list(self.game_state.allowed_words - set(possible_solutions))
 		solution_guesses_to_try = list(possible_solutions)
 
 		solution_guesses_to_try_scored = self._prune_and_sort_guesses(
@@ -833,23 +779,23 @@ class Solver:
 
 	def get_best_guess(self) -> Optional[str]:
 
-		num_possible_solutions = len(self.possible_solutions)
+		num_possible_solutions = len(self.game_state.get_possible_solutions())
 
-		assert 0 < num_possible_solutions <= len(self.allowed_words)
+		assert 0 < num_possible_solutions <= len(self.game_state.allowed_words)
 
-		if len(self.guesses) == 0:
+		if len(self.game_state.guesses) == 0:
 			# First guess
 			# Regular algorithm is O(n^2), which is way too slow
 			# Instead just use whichever has the most common letters
-			return self._prune_and_sort_guesses(self.allowed_words, None, positional=True, debug_log=True)[0]
+			return self._prune_and_sort_guesses(self.game_state.allowed_words, None, positional=True, debug_log=True)[0]
 
 		elif num_possible_solutions == 2:
 			# No possible way to pick
 			# Choose the first one alphabetically - that way the behavior is deterministic
-			return sorted(list(self.possible_solutions))[0]
+			return sorted(list(self.game_state.get_possible_solutions()))[0]
 
 		elif num_possible_solutions == 1:
-			return tuple(self.possible_solutions)[0]
+			return tuple(self.game_state.get_possible_solutions())[0]
 
 		elif num_possible_solutions <= self.params.recursion_max_solutions:
 			# Search based on fewest number of guesses needed to solve puzzle

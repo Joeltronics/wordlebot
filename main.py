@@ -313,6 +313,9 @@ def benchmark(args, a_b_test: bool):
 			# First guess should be fast, last guess may be fast as well; intermediate guess time is a more interesting stat
 			start_time = time.time()
 
+			this_solver_args['possible_solutions'] = set(this_solver_args['possible_solutions'])
+			this_solver_args['allowed_words'] = set(this_solver_args['allowed_words'])
+
 			solver = Solver(**this_solver_args)
 
 			game = Game(solution=solution, solver=solver, silent=True, specified_guesses=args.guesses)
@@ -464,9 +467,17 @@ def main():
 
 	elif args.command in ['play', 'solve', 'assist']:
 
+		allowed_words = word_list.words
+		possible_solutions = word_list.words if args.all_words else word_list.solutions
+		solver_solutions = allowed_words if args.agnostic else possible_solutions
+
+		allowed_words = set(allowed_words)
+		possible_solutions = set(possible_solutions)
+		solver_solutions = set(solver_solutions)
+
 		solver = Solver(
-			valid_solutions=(word_list.words if (args.all_words or args.agnostic) else word_list.solutions),
-			allowed_words=word_list.words,
+			possible_solutions=solver_solutions,
+			allowed_words=allowed_words,
 			complexity_limit=int(round(10.0 ** args.limit)),
 			verbosity=(
 				SolverVerbosity.verbose_debug if args.verbose_debug else
@@ -476,12 +487,19 @@ def main():
 		)
 
 		if args.command == 'assist':
-			game = GameAssist(solver=solver)
+			game = GameAssist(allowed_words=allowed_words, possible_solutions=possible_solutions, solver=solver)
 			game.play()
 
 		else:
 			solution = pick_solution(args)
-			game = Game(solution=solution, solver=solver, silent=False, specified_guesses=args.guesses)
+			game = Game(
+				solution=solution,
+				allowed_words=allowed_words,
+				possible_solutions=possible_solutions,
+				solver=solver,
+				silent=False,
+				specified_guesses=args.guesses,
+			)
 			game.play(endless=args.endless, auto_solve=(args.command == 'solve'))
 
 	else:

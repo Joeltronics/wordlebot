@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 
+from copy import copy
 import itertools
 from typing import Optional
 
-from copy import copy
+from game_state import GameState
 from game_types import *
 import matching
 from solver import Solver
@@ -11,35 +12,9 @@ import user_input
 from word_list import get_word_from_str, words
 
 
-class LetterStatuses:
-
-	def __init__(self):
-		self.char_status = {
-			chr(ch): LetterResult.unknown for ch in range(ord('A'), ord('Z') + 1)
-		}
-
-	def _format_char(self, ch: str):
-		return self.char_status[ch.upper()].get_format() + ch.upper()
-
-	def print_keyboard(self):
-		rows = [
-			'QWERTYUIOP',
-			'ASDFGHJKL',
-			'ZXCVBNM',
-		]
-		for row in rows:
-			print(''.join([self._format_char(ch) for ch in row]) + Style.RESET_ALL + ' ')
-
-	def add_guess(self, guess: Guess):
-		for character, status in guess:
-			assert character == character.upper()
-			if self.char_status[character].value < status.value:
-				self.char_status[character] = status
-
-
-def print_possible_solutions(solver, max_num_to_print=100):
+def print_possible_solutions(game_state: GameState, max_num_to_print=100):
 	
-	num_possible_solutions = solver.get_num_possible_solutions()
+	num_possible_solutions = game_state.get_num_possible_solutions()
 
 	if (max_num_to_print is not None) and (num_possible_solutions > max_num_to_print):
 		# 101+
@@ -48,7 +23,7 @@ def print_possible_solutions(solver, max_num_to_print=100):
 	elif num_possible_solutions > 10:
 		# 11-100
 		print('%i possible solutions:' % num_possible_solutions)
-		solutions = sorted(list(solver.get_possible_solitions()))
+		solutions = sorted(list(game_state.get_possible_solutions()))
 		for tens in range(len(solutions) // 10 + 1):
 			idx_start = tens * 10
 			idx_end = min(idx_start + 10, len(solutions))
@@ -56,21 +31,21 @@ def print_possible_solutions(solver, max_num_to_print=100):
 
 	elif num_possible_solutions > 1:
 		# 2-10
-		solutions = sorted([solution for solution in solver.get_possible_solitions()])
+		solutions = sorted([solution for solution in game_state.get_possible_solutions()])
 		print('%i possible solutions: %s' % (num_possible_solutions, ', '.join([str(s) for s in solutions])))
 
 	else:
 		# 1
-		print('Only 1 possible solution: %s' % tuple(solver.get_possible_solitions())[0])
+		print('Only 1 possible solution: %s' % tuple(game_state.get_possible_solutions())[0])
 
 
-def print_most_common_unsolved_letters(solver):
-	num_possible_solutions = solver.get_num_possible_solutions()
+def print_most_common_unsolved_letters(game_state: GameState):
+	num_possible_solutions = game_state.get_num_possible_solutions()
 
 	if num_possible_solutions > 2:
 
 		unsolved_letters_overall_counter, unsolved_letter_positional_counters = \
-			solver.get_unsolved_letters_counter(per_position=True)
+			game_state.get_unsolved_letters_counter(per_position=True)
 
 		print(
 			'Order of most common unsolved letters: ' +
@@ -83,8 +58,7 @@ def print_most_common_unsolved_letters(solver):
 				f'Order of most common position {position_idx + 1} letters: ' +
 				''.join([letter.upper() for letter, frequency in position_counter.most_common()]))
 
-
-def print_all_letter_combos(guesses: list[Guess]):
+def print_all_letter_combos(game_state):
 
 	debug_print = False
 
@@ -94,7 +68,7 @@ def print_all_letter_combos(guesses: list[Guess]):
 	green_letters = [None] * 5
 	unsolved_positions = set([0, 1, 2, 3, 4])
 
-	for guess in guesses:
+	for guess in game_state.guesses:
 		for idx, (letter, result) in enumerate(guess):
 			if result == LetterResult.correct:
 				green_letters[idx] = letter
@@ -111,7 +85,7 @@ def print_all_letter_combos(guesses: list[Guess]):
 
 	yellow_letters = dict()
 
-	for guess in guesses:
+	for guess in game_state.guesses:
 
 		unique_letters = set(guess.word.word)
 		for letter in unique_letters:
@@ -193,13 +167,16 @@ class Game:
 			self,
 			solution: Word,
 			solver: Optional[Solver],
+			allowed_words: set[Word],
+			possible_solutions: set[Word],
 			silent = False,
 			specified_guesses: Optional[list[Word]] = None):
+
+		self.game_state = GameState(allowed_words=allowed_words, possible_solutions=possible_solutions)
 
 		self.solution = solution
 		self.solver = solver
 		self.silent = silent
-		self.guesses = []
 
 		if specified_guesses is None:
 			self.specified_guesses = []
@@ -211,8 +188,6 @@ class Game:
 				return guess.lower()
 			self.specified_guesses = [_check_guess(guess) for guess in specified_guesses]
 
-		self.letter_status = None if silent else LetterStatuses()
-
 	def print(self, *args, **kwargs):
 		if not self.silent:
 			print(*args, **kwargs)
@@ -222,7 +197,7 @@ class Game:
 
 	def _get_guess(self, turn_num: int, auto_solve: bool) -> Word:
 		if not self.silent:
-			self.letter_status.print_keyboard()
+			self.game_state.print_keyboard()
 		self.print()
 
 		specified_guess = self.specified_guesses[turn_num - 1] if (turn_num - 1) < len(self.specified_guesses) else None
@@ -241,8 +216,8 @@ class Game:
 				raise AssertionError('Cannot auto-solve if solver is not given!')
 	
 			if not self.silent:
-				print_possible_solutions(solver=self.solver)
-				print_most_common_unsolved_letters(solver=self.solver)
+				print_possible_solutions(self.game_state)
+				print_most_common_unsolved_letters(self.game_state)
 
 			self.print()
 			guess = self.solver.get_best_guess()
@@ -250,45 +225,42 @@ class Game:
 			return guess
 
 		extra_commands = {
-			'cheat': (lambda: self._show_solution(), 'Show solution')
+			'cheat': (self._show_solution, 'Show solution'),
+			'num': (
+				lambda: self.print('%i possible solution(s)' % self.game_state.get_num_possible_solutions()),
+				'Show number of possible solutions'
+			),
+			'list': (
+				lambda: print_possible_solutions(self.game_state, max_num_to_print=None),
+				'List possible solutions'
+			),
+			'stats': (
+				lambda: print_most_common_unsolved_letters(self.game_state),
+				'List most common unsolved letters'
+			),
+			'combos': (
+				lambda: print_all_letter_combos(self.game_state),
+				'Print all letter combos'
+			)
 		}
 
 		if self.solver is not None:
-			extra_commands['num'] = (
-				lambda: self.print('%i possible solutions' % self.solver.get_num_possible_solutions()),
-				'Show number of possible solutions'
-			)
-			extra_commands['list'] = (
-				lambda: print_possible_solutions(solver=self.solver, max_num_to_print=None),
-				'List possible solutions'
-			)
-			extra_commands['stats'] = (
-				lambda: print_most_common_unsolved_letters(solver=self.solver),
-				'List most common unsolved letters'
-			)
 			extra_commands['solve'] = (
 				lambda: self.print("Solver's best guess is %s" % self.solver.get_best_guess()),
 				'Get guess from solver'
-			)
-			extra_commands['combos'] = (
-				lambda: print_all_letter_combos(self.guesses),
-				'Print all letter combos'
 			)
 
 		return user_input.ask_word(turn_num, extra_commands=extra_commands)
 
 	def _handle_guess(self, guess: Guess):
 
-		self.guesses.append(guess)
-
-		if self.letter_status is not None:
-			self.letter_status.add_guess(guess)
+		self.game_state.add_guess(guess)
 
 		if self.solver is not None:
 			self.solver.add_guess(guess)
 
 		self.print()
-		for n, guess_to_print in enumerate(self.guesses):
+		for n, guess_to_print in enumerate(self.game_state.guesses):
 			self.print('%i: %s' % (n + 1, guess_to_print))
 		self.print()
 
@@ -325,40 +297,43 @@ class GameAssist:
 
 	def __init__(
 			self,
-			solver: Solver):
+			solver: Solver,
+			allowed_words: set[Word],
+			possible_solutions: set[Word]):
+
+		self.game_state = GameState(allowed_words=allowed_words, possible_solutions=possible_solutions)
 		self.solver = solver
-		self.guesses = []
-		self.letter_status = LetterStatuses()
 
 	def print(self, *args, **kwargs):
 		if not self.silent:
 			print(*args, **kwargs)
 
 	def _get_guess_word(self, turn_num: int) -> Word:
-		self.letter_status.print_keyboard()
+		self.game_state.print_keyboard()
 		self.print()
 
-		extra_commands = dict()
-		extra_commands['num'] = (
-			lambda: self.print('%i possible solutions' % self.solver.get_num_possible_solutions()),
-			'Show number of possible solutions'
-		)
-		extra_commands['list'] = (
-			lambda: print_possible_solutions(solver=self.solver, max_num_to_print=None),
-			'List possible solutions'
-		)
-		extra_commands['stats'] = (
-			lambda: print_most_common_unsolved_letters(solver=self.solver),
-			'List most common unsolved letters'
-		)
-		extra_commands['solve'] = (
-			lambda: self.print("Solver's best guess is %s" % self.solver.get_best_guess()),
-			'Get guess from solver'
-		)
-		extra_commands['combos'] = (
-			lambda: print_all_letter_combos(self.guesses),
-			'Print all letter combos'
-		)
+		extra_commands = {
+			'num': (
+				lambda: self.print('%i possible solution(s)' % self.game_state.get_num_possible_solutions()),
+				'Show number of possible solutions'
+			),
+			'list': (
+				lambda: print_possible_solutions(self.game_state, max_num_to_print=None),
+				'List possible solutions'
+			),
+			'stats': (
+				lambda: print_most_common_unsolved_letters(self.game_state),
+				'List most common unsolved letters'
+			),
+			'combos': (
+				lambda: print_all_letter_combos(self.game_state),
+				'Print all letter combos'
+			),
+			'solve': (
+				lambda: self.print("Solver's best guess is %s" % self.solver.get_best_guess()),
+				'Get guess from solver'
+			),
+		}
 
 		return user_input.ask_word(turn_num, extra_commands=extra_commands)
 
@@ -372,16 +347,15 @@ class GameAssist:
 		:returns: true on success, false if guess was not valid
 		"""
 		try:
-			self.solver.add_guess(guess)
+			self.game_state.add_guess(guess)
 		except ValueError as ex:
 			self.print(f'Invalid word or result: {ex}')
 			return False
 
-		self.letter_status.add_guess(guess)		
-		self.guesses.append(guess)
+		self.solver.add_guess(guess)
 
 		self.print()
-		for n, guess_to_print in enumerate(self.guesses):
+		for n, guess_to_print in enumerate(self.game_state.guesses):
 			self.print('%i: %s' % (n + 1, guess_to_print))
 		self.print()
 		return True
@@ -408,5 +382,5 @@ class GameAssist:
 
 			elif turn_num >= 6 and not endless:
 				self.print('Failed')
-				print_possible_solutions(solver=self.solver)
+				print_possible_solutions(self.game_state)
 				return
