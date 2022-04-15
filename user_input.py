@@ -48,7 +48,7 @@ def ask_word(guess_num: int, extra_commands: Optional[dict[str, tuple[Callable, 
 				print('Unknown command: "!%s". Enter "!help" for a list of commands' % command)
 			continue
 
-		guess = user_input
+		guess = user_input.upper()
 
 		# Debug feature: start with '!' to force allowing a guess
 		allow_invalid = False
